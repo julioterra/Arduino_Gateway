@@ -49,37 +49,48 @@ while (server_running && client = server.accept)
 		# make sure that resource being requested was not /favicon.ico
 		if !(client_get_request_match[2] =~ /\/favicon.ico\z/) 
 			puts "GOTHERE"
-			Thread.new(client) do |connection|
-				puts "GOTHEREthread"
-				thread_count += 1			
-				begin
-					socket = Socket.new( AF_INET, SOCK_STREAM, 0 )
-					# create an AF_INET address string with the port number and host IP addres
-					sockaddr = Socket.pack_sockaddr_in( arduino_port_number, arduino_host_ip )
-					# connect to IP address we just packed
-					socket.connect( sockaddr )
-					# make an HTTP GET request to the arduino
-					socket.write( "GET / HTTP/1.0\r\n\r\n" )	
-					results = socket.read
+			
+			
+  			Thread.new client do |connection|
+  				puts "thread starting"
+  				thread_count += 1	
+  				time_now = Time.now		
+          results = "It's #{time_now} and we are having some server issues. Be back up soon."
+          arduino_host_ip = '192.168.2.200'
+          arduino_port_number = 7999
 
-					socket.close
-				rescue => e
-					puts "ERROR - Time: #{Time.now}, clients: #{client_count}, threads: #{thread_count}"
-					puts "ERROR - Exception Message: #{e.message}, #{e.backtrace}"
-					results = "HTTP/1.0 500 ERROR\r\n\r\n"
-				end									
-				results += "client_count: #{client_count.to_s} thread_count: #{thread_count.to_s}<br />\n" +
-						   "requested resource: #{client_get_request_match[2]}"
+          socket = Socket.new( AF_INET, SOCK_STREAM, 0 )        
+        	# create an AF_INET address string with the port number and host IP addres
+        	sockaddr = Socket.pack_sockaddr_in( arduino_port_number, arduino_host_ip )
+        	# connect to IP address we just packed
+  				begin
+          	if (socket.connect( sockaddr ) == 0)
+            	  # make an HTTP GET request to the arduino
+              	socket.write( "GET / HTTP/1.0\r\n\r\n" )
+            	  puts "socket.write( 'GET \/ HTTP\/1.0' )"
+              	results = socket.read
+            	  puts "socket.read"
+                socket.close
+        				results += "client_count: #{client_count.to_s} thread_count: #{thread_count.to_s}<br />\n" +
+        						       "requested resource: #{client_get_request_match[2]}"            	
+            else
+              results = "Data not available" +
+                        "client_count: #{client_count.to_s} thread_count: #{thread_count.to_s}<br />\n" +
+                						       "requested resource: #{client_get_request_match[2]}"  
+            end
+          rescue
+        	  puts "RESCUE: #{results}"
+          
+          end          
 
-				#puts "GOTHERE socket read : #{results}"
-
-				# send the results back to the client on port 7999
-				connection.puts results  # Send the time to the client
-				# display the results on the terminal
-				puts results
-
-				connection.close
-			end
+      		# send the results back to the client on port 7999
+  				connection.puts results  # Send the time to the client
+  				# display the results on the terminal
+  				puts "final message sent: #{results}"
+  				connection.close
+  				
+  			end
+			
 		end
 	end
 end
