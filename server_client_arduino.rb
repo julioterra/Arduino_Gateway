@@ -7,27 +7,32 @@ include Socket::Constants
 # ip address and host numbers
 arduino_host_ip = '192.168.2.200'
 arduino_port_number = 7999
-internet_port_number = 7996
+public_port_number = 7996
 server_running = true
 
-server = TCPServer.new(internet_port_number)  # Socket to listen on port 2000
+server = TCPServer.new(public_port_number)  # Socket to listen on port 2000
 client_count = 0 
 thread_count = 0
 
-# while the server is accepting clients 
-while (client = server.accept) 
-	client_count += 1
-	client_data = client.recvfrom(1500)[0].chomp.to_s
-	puts "\nmessage received - length equals = #{client_data.length}"
-
-	Thread.new(client) do |connection|
+# create a thread to listen to keyboard commands
+Thread.new(server) do |servidor|
+	while(server_running)
 		input = gets.chomp
-		puts input
-		if input.contains?("X") then
-			puts "got it right to exit"
+		puts "processing your input [#{input}]"
+		if input.include?("X") then
+			puts "closing port #{public_port_number} and exiting app..."
+			server_running = false
+			servidor.close
 			exit 
 		end
 	end
+end
+
+# while the server is accepting clients 
+while (server_running && client = server.accept) 
+	client_count += 1
+	client_data = client.recvfrom(1500)[0].chomp.to_s
+	puts "\nmessage received - length equals = #{client_data.length}"
 
 	# regex syntax for matching GET requests 
 	get_request_syntax = /(GET)\s(\/.*?)\s(\S*)/	
@@ -43,7 +48,9 @@ while (client = server.accept)
 		
 		# make sure that resource being requested was not /favicon.ico
 		if !(client_get_request_match[2] =~ /\/favicon.ico\z/) 
+			puts "GOTHERE"
 			Thread.new(client) do |connection|
+				puts "GOTHEREthread"
 				thread_count += 1			
 				begin
 					socket = Socket.new( AF_INET, SOCK_STREAM, 0 )
@@ -54,14 +61,17 @@ while (client = server.accept)
 					# make an HTTP GET request to the arduino
 					socket.write( "GET / HTTP/1.0\r\n\r\n" )	
 					results = socket.read
+
 					socket.close
 				rescue => e
-					results ||= "HTTP/1.0 500\r\n\r\n"
 					puts "ERROR - Time: #{Time.now}, clients: #{client_count}, threads: #{thread_count}"
 					puts "ERROR - Exception Message: #{e.message}, #{e.backtrace}"
+					results = "HTTP/1.0 500 ERROR\r\n\r\n"
 				end									
 				results += "client_count: #{client_count.to_s} thread_count: #{thread_count.to_s}<br />\n" +
 						   "requested resource: #{client_get_request_match[2]}"
+
+				#puts "GOTHERE socket read : #{results}"
 
 				# send the results back to the client on port 7999
 				connection.puts results  # Send the time to the client
