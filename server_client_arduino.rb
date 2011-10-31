@@ -14,9 +14,6 @@ server = TCPServer.new(public_port_number)  # Socket to listen on port 2000
 client_count = 0 
 thread_count = 0
 
-# thread 
-
-
 # create a thread to listen to keyboard commands
 Thread.new(server) do |servidor|
 	while(server_running)
@@ -34,66 +31,47 @@ end
 class TimeoutException < Exception 
 end
 
-current_t = 0
-
-def connect_to(host, port, timeout=nil, socket_client)
-	time_start = "#{Time.now}"		
-  results = "It's #{time_start} and we are having some server issues. Be back up soon."
-  addr = Socket.getaddrinfo(host, nil)
+def connect_to(host, port, socket_client, timeout=2)
+  results = "It's #{Time.now} and we are having some server issues. Be back up soon."
+  addr = Socket.getaddrinfo(host, nil)  
   socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
-  waiting_for_data = true
 
   timer = Thread.new(socket, socket_client) do |connection, client_connection|
-      puts "THREAD"
       start_time = Time.now.sec
-      end_time = start_time + 3
+      end_time = start_time + timeout
       current_time = Time.now.sec
       if current_time < start_time then current_time += 60 end
-      puts "before loop #{start_time}, #{end_time}"
+      # puts "before loop #{start_time}, #{end_time}"
       begin
           loop do
             current_time = Time.now.sec
             if current_time < start_time then current_time += 60 end
-            if current_time > end_time 
-              puts "done waiting"
-              connection.close
-              client_connection.puts results
-              client_connection.close
-              puts "port closed"
-              raise Exception, "too much time" 
-            end
+            if current_time > end_time then raise TimeoutException, "Timer exceeded time limit. Raising TimeoutException." end
           end
-       rescue Exception => e
-          time_end = Time.now
-          connection.close
+       rescue TimeoutException => e
           client_connection.puts results
+          connection.close
           client_connection.close
-          puts "Error Messages: start time: #{time_start}, end time: #{time_end}\n#{e.message}, #{e.backtrace}"
+          puts "Error Rescue: ports closed and exceptions results sent.\n"
+          puts "Error Message: #{e.message},", e.backtrace
       end
    end
 
-  # begin
   connection_status = socket.connect(Socket.pack_sockaddr_in(port, addr[0][3]))
   if (connection_status == 0)
-    socket
-    puts "socket connected"
-    # make an HTTP GET request to the arduino
-  	socket.write( "GET / HTTP/1.0\r\n\r\n" )
-    puts "socket.write( 'GET \/ HTTP\/1.0' )"
-  	results = socket.read
-    puts "socket.read"
-    waiting_for_data = false
-    socket.close
     timer.kill
+    socket
+  else
+    nil
   end
-  results
 end
+
 
 # while the server is accepting clients 
 while (server_running && client = server.accept) 
 	client_count += 1
 	client_data = client.recvfrom(1500)[0].chomp.to_s
-	puts "\nmessage received - length equals = #{client_data.length}"
+	puts "\nrequest length: #{client_data.length}"
 
 	# regex syntax for matching GET requests 
 	get_request_syntax = /(GET)\s(\/.*?)\s(\S*)/	
@@ -111,13 +89,15 @@ while (server_running && client = server.accept)
 		if !(client_get_request_match[2] =~ /\/favicon.ico\z/) 
 			
   			Thread.new client do |connection|
-  				puts "thread starting"
   				thread_count += 1	
-  				time_now = "#{Time.now}"		
-          results = "It's #{time_now} and we are having some server issues. Be back up soon."
-          arduino_host_ip = '192.168.2.200'
-          arduino_port_number = 7999
-				  results = connect_to(arduino_host_ip, arduino_port_number, 5, connection)
+          results = "It's #{Time.now} and we are having some server issues. Be back up soon."
+				  socket = connect_to(arduino_host_ip, arduino_port_number, connection)
+          if (socket)
+          	socket.write( "GET / HTTP/1.0\r\n\r\n" )
+          	results = socket.read
+            socket.close
+          end			  
+
   				results += "client_count: #{client_count.to_s} thread_count: #{thread_count.to_s}<br />\n" +
   						       "requested resource: #{client_get_request_match[2]}"      
 
