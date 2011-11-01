@@ -7,8 +7,12 @@ include Socket::Constants
 class TimeoutException < Exception 
 end
 
+class ServerRequests
+    
+end
+
 class ArduinoServer 
-    attr_accessor :arduino_list, :error
+    attr_accessor :arduino_list, :results, :socket
 
     def initialize (public_port, arduino_port)
         # ip address and host numbers
@@ -16,6 +20,7 @@ class ArduinoServer
         @arduino_port_number = arduino_port.to_i
         @arduino_host_ip = ""
         @arduino_list = []
+        @results = ""
               
         @server = TCPServer.new(@public_port_number)  
         @server_running = true
@@ -34,6 +39,7 @@ class ArduinoServer
         	end
         end
     end
+    
 
     # for setting the arduino host ip
     def register_arduino (arduino_host_ip)
@@ -42,46 +48,91 @@ class ArduinoServer
     end
 
 
-    def connect_to_arduino(client, timeout=2)
-        addr = Socket.getaddrinfo(@arduino_host_ip, nil)  
-        @socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
+    def connect_to_arduino(client, private_server_msg, timeout=2)
 
-        timer = Thread.new(@socket, client) do |socket_connection, client_connection|
+        # holds current connection status with an Arduino
+        #   0 = establishing connection
+        #   1 = connection established
+        #  -1 = connection unavailable
+        connection_status = 0
+        
+        # thread
+        connect_thread = Thread.new(client) do |client_connection|
+            addr = Socket.getaddrinfo(@arduino_host_ip, nil)  
+            socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
+            Thread.current[:status] = 0
+            puts "connect_thread - trying to connect - #{Thread.current[:status]}\n  "
+            begin
+                connection_status = socket.connect(Socket.pack_sockaddr_in(@arduino_port_number, addr[0][3]))
+                puts "SUCCESS: connection established"
+                if Thread.current[:status].to_i == 0
+                    puts "SUCCESS: connection established"
+                    Thread.current[:status] = 1
+                    puts "SUCCESS: write request"
+                   	socket.write( private_server_msg )
+                   	@results = socket.read
+                    puts "SUCCESS: message read #{@results}"
+                    socket.close
+                    client_connection.puts @results
+                    client_connection.close
+                    Thread.current[:status] = 2
+                end
+              rescue => e
+                puts "ERROR [connect_to_arduino/connect_thread] \n #{e.message} \n#{e.backtrace}"
+            end
+        end
+
+        timer = Thread.new(client, connect_thread) do |client_connection, con_thread|
             start_time = Time.now.sec
-            end_time = start_time + 2
-            puts "before loop #{start_time}, #{end_time}"
+            end_time = start_time + timeout
+            puts "#{start_time} + #{timeout}"
             begin
                 loop do
                     current_time = Time.now.sec
                     if current_time < start_time then current_time += 60 end
-                    if current_time > end_time 
-                      raise TimeoutException, "Taking too long." 
-                      # client_connection.puts results
-                      # socket_connection.close
-                      # client_connection.close
-                      # destroy
+                    if (current_time > end_time) then raise TimeoutException, "Taking too long." end
+                    if con_thread[:status] == 1 || con_thread[:status] == 2 
+                      puts "** Timer Stopping at Thread Status #{con_thread[:status]}"
+                      Thread.stop 
                     end
                 end
-             rescue TimeoutException => e
-                error = "<p>We are having some server issues. Be back up soon. Thanks for visiting<br/>#{Time.now}/</p>"
-                puts error
-                # client_connection.puts error
-                @socket.close
-                # client_connection.close
-                puts "Error Rescue: ports closed and exceptions results sent.\n"
-                puts "Error Message: #{e.message},", e.backtrace
-                destroy
-            end
-            puts "after loop #{start_time}, #{end_time}"
-         end
+             rescue TimeoutException, Exception => e
+                if con_thread[:status].to_i == 0
+                    @results = "<p>It's #{Time.now} and we are having some server issues. Be back up soon. Thanks for visiting</p>"
+                    puts "FAILURE: connection not established - #{e.backtrace}\n"
 
-        connection_status = @socket.connect(Socket.pack_sockaddr_in(@arduino_port_number, addr[0][3]))
-        if (connection_status == 0)
-          timer.kill
-          true
-        else
-          false
+                    # socket_connection.close
+                    client_connection.puts @results
+                    client_connection.close
+                    con_thread[:status] = -1
+                end
+            end
+         end
+                
+        while(connect_thread[:status].to_i == 0 || connect_thread[:status].to_i == 1)
         end
+          
+        if !timer.stop? then timer.stop end
+        if connect_thread.stop? then connect_thread.stop end
+
+        if (connect_thread[:status] == 2)
+          puts "return true #{@results}"
+          # connect_thread.stop
+          return 0
+        elif if (connect_thread[:status] == -1)
+          puts "return false"
+          # connect_thread.stop
+          return -1
+        end
+    end
+
+     def read_data (client_connection, private_server_msg)
+         begin
+             connect_to_arduino(client_connection, private_server_msg)
+         rescue Exception => e
+             puts "ERROR [read_data]  #{e.message}"
+         end
+         @results
     end
 
     def stop
@@ -93,15 +144,18 @@ class ArduinoServer
     def run
         # while the server is accepting clients 
         while (@server_running && client = @server.accept) 
-          	@client_count += 1
+            # puts "^^^^^^ connecting to client number #{@client_count}"
 
       	    Thread.new client do |client_connection|
-                results = "<p>It's #{Time.now} and we are having some server issues. Be back up soon. Thanks for visiting</p>"
-
+              	@client_count += 1
+              	current_client = @client_count
+                @results = "<p>It's #{Time.now} and we are having some server issues. Be back up soon. Thanks for visiting</p>"
+                
                 # read request from client and print request length
-              	client_data = client.recvfrom(1500)[0].chomp.to_s
-              	puts "\nrequest length: #{client_data.length}"
-                # puts "#{client_data}"
+              	client_data = client_connection.recvfrom(1500)[0].chomp.to_s
+                puts "\nclient number: #{current_client}", 
+                     "request length: #{client_data.length}",
+                     "#{client_data}"
 
               	# get request data from regex match on client_data
               	# but first set the regex syntax for matching GET requests 
@@ -110,43 +164,29 @@ class ArduinoServer
 
               	# if regex match was found then process the message
               	if (client_get_request_match)
-                		puts "request message: #{client_get_request_match[0]}"
-                		puts "request type: #{client_get_request_match[1]}"
-                		puts "request resource: #{client_get_request_match[2]}"
-                		puts "request format: #{client_get_request_match[3]}"
+                		puts "request message: #{client_get_request_match[0]}",
+                		     "request type: #{client_get_request_match[1]}",
+                		     "request resource: #{client_get_request_match[2]}",
+                		     "request format: #{client_get_request_match[3]}"
 
                 		# make sure that resource being requested was not /favicon.ico
                 		if !(client_get_request_match[2] =~ /\/favicon.ico/) 
-                        puts "match found #{(client_get_request_match[2] =~ /\/favicon.ico/)}"
-
-                      # Thread.new client do |client_connection|
-                				@thread_count += 1	
-
-                        # connect to arduino, and read data from the @socket if connection was successful
-                        if (connect_to_arduino(client_connection))
-                          	@socket.write( "GET / HTTP/1.0\r\n\r\n" )
-                          	results = @socket.read
-                            @socket.close
-                        end			  
-
-                				results += "client_count: #{@client_count.to_s} thread_count: #{@thread_count.to_s}<br />\n" +
-                						       "requested resource: #{client_get_request_match[2]}"      
-
-                    		# send the results back to the client on port 7999
-                				client_connection.puts results  # Send the time to the client
-                        client_connection.close
-
-                				# display the results on the terminal
-                				puts "server response to client: \n#{results}"
-                      # end
+                		    read_data(client_connection, "GET / HTTP/1.0\r\n\r\n")
+                        # client_connection.puts @results
+                        # client_connection.close
+                        print_string = "Message Sent \n" +
+                                       "Client Number: #{current_client}<br /> \n" +
+                                       "Response Data: #{@results}"
+                        puts print_string
                     else
-              				  client_connection.puts error  # Send the time to the client
-                        client.close
+                        client_connection.close
                 		end
               	end
+
             end
         end
     end
+          
 end
 
 arduino_host_ip = '192.168.2.200'
