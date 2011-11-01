@@ -8,16 +8,18 @@ class TimeoutException < Exception
 end
 
 class RestfulRequests
-   attr_accessor :method_type, :resources, :format 
-   attr_reader :resources_list
+   attr_accessor :method_type, :format, :address 
+   attr_reader :resources_list, :resources
    
    def initialize(method, resources, format)
       puts "[RestfulRequests:initialize] initializing server request object"
         @method_type = method
         @format = format
         @resources = resources
+        @address = {:ip_host => "0.0.0.0", :channel => -1}
         self.resources_list = @resources
         puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@resource_list.length}"
+        puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@address}"
         self.print
    end
    
@@ -26,6 +28,10 @@ class RestfulRequests
      self.resource_list = @resources
    end
 
+   def address=(ip_host, channel)
+     @address[:ip_host] = ip_host.to_s
+     @address[:channel] = channel.to_i
+   end
 
    ## FULLY WORKING FUNCTION
    #  
@@ -49,11 +55,7 @@ class RestfulRequests
           # go through each element in the input array using map function
           # make sure all elements start with a forward slash before saving
           if debug_code ; puts "[RestfulRequests:resource_list:3] array input"; end
-          resource_list_update_with_array=resource_in
-          # @resource_list = resource_in.map { |resource| 
-          #             if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
-          #           } 
-          #           @resources = @resource_list.join
+          resource_list_update_with_array = resource_in
       end
       @resource_list
       rescue => e
@@ -71,31 +73,39 @@ class RestfulRequests
     end
     
    def print
-     print_string = @method_type.upcase + " " + @resources + " " + @format
-     puts "[RestfulRequests:print] request normal: #{print_string}"
+     puts "[RestfulRequests:print] resftul request: #{self.get_restful_request}"
+     puts "[RestfulRequests:print] full request: #{self.get_full_request}"
+     puts "[RestfulRequests:print] address: #{self.address}"
      
      recompiled_resource = @method_type.upcase + " " + @resource_list.join + " " + @format
      puts "[RestfulRequests:print] request recompiled: #{recompiled_resource}"
    end
 
-   def print
-     print_string = @method_type.upcase + " " + @resources + " " + @format
-     puts "[RestfulRequests:print] request normal: #{print_string}"
-     
-     recompiled_resource = @method_type.upcase + " " + @resource_list.join + " " + @format
-     puts "[RestfulRequests:print] request recompiled: #{recompiled_resource}"
+   def get_restful_request
+     return_string = @method_type.upcase + " " + @resources + "\r\n\r\n"
+     # puts "[RestfulRequests:get_request] RESTful request: #{return_string}"
+     return_string
    end
 
-   
+   def get_full_request
+     return_string = @address[:ip_host].to_s + " " + @address[:channel].to_s + " " + 
+                     @method_type.upcase + " " + @resources + " " + @format + "\r\n\r\n"
+     # puts "[RestfulRequests:get_full_request] FULL request: #{return_string}"
+   end
+
+
 end
 
+
+
+
 class ArduinoServer 
-    attr_accessor :arduino_list, :debug_code
+    attr_accessor :arduino_list, :debug_code, :server
 
     def initialize (public_port, arduino_port)
         puts "[ArduinoServer:new] ******************************"
         puts "[ArduinoServer:new] starting up the ArduinoServer"
-        puts "[ArduinoServer:new] files in data directory: #{`ls ./data/`}"
+        # puts "[ArduinoServer:new] files in data directory: #{`ls ./data/`}"
         puts "[ArduinoServer:new] ******************************"
         # ip address and host numbers
         @public_port_number = public_port.to_i
@@ -103,11 +113,14 @@ class ArduinoServer
         @arduino_host_ip = ""
         @arduino_list = []
         @debug_code = true      
-              
-        @server = TCPServer.new(@public_port_number)  
-        @server_running = true
-        @client_count = 0 
-        @thread_count = 0
+        begin        
+            @server = TCPServer.new(@public_port_number)  
+            @server_running = true
+            @client_count = 0 
+            @thread_count = 0
+          rescue => e
+            puts "[ArduinoServer:new] RESCUE: error with server #{e.message}"
+        end
                       
         # create a thread to listen to keyboard commands
         @key_listener = Thread.new do
@@ -120,13 +133,15 @@ class ArduinoServer
         		end
         	end
         end
+        puts "[ArduinoServer:new] finished start-up"
     end
     
 
     # for setting the arduino host ip
     def register_arduino (arduino_host_ip)
-      arduino_list << arduino_host_ip
+      @arduino_list << arduino_host_ip
       @arduino_host_ip = arduino_host_ip
+      puts "[ArduinoServer:new] finished registering arduinos"
     end
     
 
@@ -220,8 +235,10 @@ class ArduinoServer
     end
 
     def run
+        puts "RUN: starting to run - server status: #{@server_running}"
         # while the server is accepting clients 
         while (@server_running && client = @server.accept) 
+          puts "in while loop"
 
           	@client_count += 1
       	    Thread.new client do |client_connection|
@@ -243,7 +260,7 @@ class ArduinoServer
 
               	# if regex match was found then process the message
               	if (client_get_request_match)
-              	    resource_request = RestfulRequests.new($1, $2, $3)
+                    # resource_request = RestfulRequests.new($1, $2, $3)
                 		puts "RUN:request FULL message: #{client_get_request_match[0]}",
                 		     "RUN:request type: #{client_get_request_match[1]}",
                 		     "RUN:request resource: #{client_get_request_match[2]}",
