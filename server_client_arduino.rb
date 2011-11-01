@@ -221,7 +221,7 @@ class ArduinoServer
 
     end
 
-     def request_read_data (private_server_msg)
+     def request_from_arduino (private_server_msg)
          begin
              response = connect_to_arduino(@arduino_host_ip, private_server_msg)
              puts "[read_data] returning data read from arduino read method"
@@ -260,7 +260,7 @@ class ArduinoServer
 
               	# if regex match was found then process the message
               	if (client_get_request_match)
-                    # resource_request = RestfulRequests.new($1, $2, $3)
+                    resource_request = RestfulRequests.new($1, $2, $3)
                 		puts "RUN:request FULL message: #{client_get_request_match[0]}",
                 		     "RUN:request type: #{client_get_request_match[1]}",
                 		     "RUN:request resource: #{client_get_request_match[2]}",
@@ -273,7 +273,7 @@ class ArduinoServer
                                      "RUN:response Client Number: #{current_client}\n" +
                                      "RUN:response No Appropriate Response"
                     else
-              		    response = request_read_data("GET / HTTP/1.0\r\n\r\n")
+              		    response = request_from_arduino("GET / HTTP/1.0\r\n\r\n")
                       client_connection.puts response
                       client_connection.close
                       print_string = "RUN:response CONFIRMATION - Message Sent \n" +
