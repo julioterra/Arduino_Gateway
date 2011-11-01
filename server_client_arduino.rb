@@ -1,4 +1,5 @@
 require 'socket'
+require 'open-uri'
 include Socket::Constants
 
 # create a thread for the server
@@ -7,9 +8,11 @@ include Socket::Constants
 class TimeoutException < Exception 
 end
 
+
+
 class RestfulRequests
-   attr_accessor :method_type, :format, :address 
-   attr_reader :resources_list, :resources
+   attr_accessor :method_type, :format, :options
+   attr_reader :resources_list, :resources, :address
    
    def initialize(method, resources, format)
       puts "[RestfulRequests:initialize] initializing server request object"
@@ -17,6 +20,7 @@ class RestfulRequests
         @format = format
         @resources = resources
         @address = {:ip_host => "0.0.0.0", :channel => -1}
+        @options = {}
         self.resources_list = @resources
         puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@resource_list.length}"
         puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@address}"
@@ -31,6 +35,18 @@ class RestfulRequests
    def address=(ip_host, channel)
      @address[:ip_host] = ip_host.to_s
      @address[:channel] = channel.to_i
+   end
+
+   def address
+      return "http://" + @address[:ip_host].to_s + ":" + @address[:channel].to_s 
+   end
+
+   def options=(*option_in)
+       if (option_in.kind_of? String)
+         @option = option_in
+         elsif ((option_in.kind_of? Array) || (option_in.kind_of? Hash))
+         @option = option_in.join " "
+       end
    end
 
    ## FULLY WORKING FUNCTION
@@ -235,10 +251,11 @@ class ArduinoServer
     end
 
     def run
-        puts "RUN: starting to run - server status: #{@server_running}"
+        debug_code = false
+        if debug_code ; puts "RUN: starting to run - server status: #{@server_running}" ; end
         # while the server is accepting clients 
         while (@server_running && client = @server.accept) 
-          puts "in while loop"
+          if debug_code ; puts "RUN: at top of while loop" ; end
 
           	@client_count += 1
       	    Thread.new client do |client_connection|
@@ -249,9 +266,11 @@ class ArduinoServer
                 
                 # read request from client and print request length
               	client_data = client_connection.recvfrom(1500)[0].chomp.to_s
-                puts "\nRUN:client ID: #{current_client}", 
-                     "RUN:request length: #{client_data.length}"
-                     # "#{client_data}"
+                if debug_code 
+                    puts "\nRUN:client ID: #{current_client}", 
+                   "RUN:request length: #{client_data.length}"
+                   # "#{client_data}"
+                end
 
               	# get request data from regex match on client_data
               	# but first set the regex syntax for matching GET requests 
@@ -261,10 +280,12 @@ class ArduinoServer
               	# if regex match was found then process the message
               	if (client_get_request_match)
                     resource_request = RestfulRequests.new($1, $2, $3)
-                		puts "RUN:request FULL message: #{client_get_request_match[0]}",
-                		     "RUN:request type: #{client_get_request_match[1]}",
-                		     "RUN:request resource: #{client_get_request_match[2]}",
-                		     "RUN:request format: #{client_get_request_match[3]}"
+                    if debug_code 
+                    		puts "RUN:request FULL message: #{client_get_request_match[0]}",
+                    		     "RUN:request type: #{client_get_request_match[1]}",
+                    		     "RUN:request resource: #{client_get_request_match[2]}",
+                    		     "RUN:request format: #{client_get_request_match[3]}"
+            		     end
 
                 		# make sure that resource being requested was not /favicon.ico
                 		if (client_get_request_match[2] =~ /\/favicon.ico/) 
@@ -280,7 +301,7 @@ class ArduinoServer
                                      "RUN:response Client Number: #{current_client}\n" +
                                      "RUN:response Response Data: \n#{response}"
                 		end
-                    puts print_string
+                    if debug_code ; puts print_string ; end
               	end
                 client_connection.close
             end
@@ -299,6 +320,13 @@ end
 arduino_host_ip = '192.168.2.200'
 arduino_port_number = 7999
 public_port_number = 7996
+
+# ALTERNATE WAY TO GET DATA FROM ARDUINO 
+# arduino_page = open("http://192.168.2.200:7999/")
+# puts "**************************" +
+#      "here is the test page content: \n"
+# p arduino_page.read  # returns main content 
+# p arduino_page.meta  # returns content type
 
 arduino_server = ArduinoServer.new(public_port_number, arduino_port_number)
 arduino_server.register_arduino(arduino_host_ip)
