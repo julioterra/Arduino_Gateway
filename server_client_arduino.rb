@@ -7,11 +7,85 @@ include Socket::Constants
 class TimeoutException < Exception 
 end
 
-class ServerRequests
+class RestfulRequests
    attr_accessor :method_type, :resources, :format 
    attr_reader :resources_list
    
+   def initialize(method, resources, format)
+      puts "[RestfulRequests:initialize] initializing server request object"
+        @method_type = method
+        @format = format
+        @resources = resources
+        self.resources_list = @resources
+        puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@resource_list.length}"
+        self.print
+   end
    
+   def resources=(resources_in)
+     @resources = resources_in
+     self.resource_list = @resources
+   end
+
+
+   ## FULLY WORKING FUNCTION
+   #  
+   def resources_list=(resource_in)
+     debug_code = false
+     if debug_code ; puts "[RestfulRequests:resource_list:0] creating a resource object: #{resource_in}"; end
+
+     #handle string input
+     if (resource_in.kind_of? String)
+         # create a list of resources (disregard first position, which is blank) 
+         # then reformat each entry to include a starting forward slash
+         # lastly, add an ending forward slash, if appropriate
+         if debug_code ; puts "[RestfulRequests:resource_list:1] string input" ; end
+         @resource_list = resource_in[1..-1].split('/')   
+         @resource_list = @resource_list.map {|resource| resource = '/' + resource } 
+         if resource_in.chomp.end_with?('/') ; @resource_list << '/' ; end
+         if debug_code ; puts "[RestfulRequests:resource_list:2] string converted : #{@resource_list}"; end
+
+      #handle array input
+      elsif (resource_in.kind_of? Array)
+          # go through each element in the input array using map function
+          # make sure all elements start with a forward slash before saving
+          if debug_code ; puts "[RestfulRequests:resource_list:3] array input"; end
+          resource_list_update_with_array=resource_in
+          # @resource_list = resource_in.map { |resource| 
+          #             if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
+          #           } 
+          #           @resources = @resource_list.join
+      end
+      @resource_list
+      rescue => e
+        puts "[RestfulRequests:resource_list] RESCUE: #{e.message}", e.backtrace
+        @resource_list      
+  end ## END :resources_list
+  
+    def resource_list_update_with_array=(resource_in)
+        if (resource_in.kind_of? Array)
+            @resource_list = resource_in.map { |resource| 
+              if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
+            } 
+            @resources = @resource_list.join
+        end
+    end
+    
+   def print
+     print_string = @method_type.upcase + " " + @resources + " " + @format
+     puts "[RestfulRequests:print] request normal: #{print_string}"
+     
+     recompiled_resource = @method_type.upcase + " " + @resource_list.join + " " + @format
+     puts "[RestfulRequests:print] request recompiled: #{recompiled_resource}"
+   end
+
+   def print
+     print_string = @method_type.upcase + " " + @resources + " " + @format
+     puts "[RestfulRequests:print] request normal: #{print_string}"
+     
+     recompiled_resource = @method_type.upcase + " " + @resource_list.join + " " + @format
+     puts "[RestfulRequests:print] request recompiled: #{recompiled_resource}"
+   end
+
    
 end
 
@@ -19,6 +93,10 @@ class ArduinoServer
     attr_accessor :arduino_list, :debug_code
 
     def initialize (public_port, arduino_port)
+        puts "[ArduinoServer:new] ******************************"
+        puts "[ArduinoServer:new] starting up the ArduinoServer"
+        puts "[ArduinoServer:new] files in data directory: #{`ls ./data/`}"
+        puts "[ArduinoServer:new] ******************************"
         # ip address and host numbers
         @public_port_number = public_port.to_i
         @arduino_port_number = arduino_port.to_i
@@ -165,6 +243,7 @@ class ArduinoServer
 
               	# if regex match was found then process the message
               	if (client_get_request_match)
+              	    resource_request = RestfulRequests.new($1, $2, $3)
                 		puts "RUN:request FULL message: #{client_get_request_match[0]}",
                 		     "RUN:request type: #{client_get_request_match[1]}",
                 		     "RUN:request resource: #{client_get_request_match[2]}",
@@ -186,8 +265,9 @@ class ArduinoServer
                 		end
                     puts print_string
               	end
-
+                client_connection.close
             end
+
         end
     end
    
