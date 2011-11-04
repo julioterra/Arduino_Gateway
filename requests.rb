@@ -1,10 +1,11 @@
 
 class RestfulRequest
-   attr_accessor :method_type, :format, :options, :address
+   attr_accessor :method_type, :format, :options, :address, :id
    attr_reader :resources_list, :resources
    
-   def initialize(method="", resources="", format="", address={:ip_host => "0.0.0.0", :port => -1})
+   def initialize(id="", method="", resources="", format="", address={:ip_host => "0.0.0.0", :port => -1})
       puts "[RestfulRequests:initialize] initializing server request object"
+        @id = id
         @method_type = method
         @format = format
         @resources = resources
@@ -12,12 +13,14 @@ class RestfulRequest
         @options = {}
         self.resources_list = @resources
         puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@resource_list.length}"
-        puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@address}"
-        self.print
+        # puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@address}"
+        # self.print
    end
    
+   
    def resources=(resources_in)
-     @resources = resources_in
+     # user resource_list= method to assign the resouce_list and resource variable
+     #    this method is able to handle both array and string input
      self.resource_list = @resources
    end
 
@@ -35,8 +38,8 @@ class RestfulRequest
        end
    end
 
-   ## FULLY WORKING FUNCTION
-   #  
+   # Resource List = 
+   # method can take input that is an array or string. It converts the input as needed
    def resources_list=(resource_in)
      debug_code = false
      if debug_code ; puts "[RestfulRequests:resource_list:0] creating a resource object: #{resource_in}"; end
@@ -66,7 +69,8 @@ class RestfulRequest
         @resource_list      
   end ## END :resources_list
   
-    def resource_list_update_with_array=(resource_in)
+
+    def resource_list_array=(resource_in)
         if (resource_in.kind_of? Array)
             @resource_list = resource_in.map { |resource| 
               if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
@@ -85,7 +89,7 @@ class RestfulRequest
    end
 
    def restful_request
-     return_string = @method_type.upcase + " " + @resources + "\r\n\r\n"
+     return_string = @method_type.upcase + " " + @resources + " " + @format + "\r\n\r\n"
      # puts "[RestfulRequests:get_request] RESTful request: #{return_string}"
      return_string
    end

@@ -5,25 +5,12 @@ require './requests.rb'
 
 class ArduinoClient
 
-    def initialize(message="", timeout=2)
-      # request(message) if message.is_a? RestfulRequest
-      # else
-      #     # holds current connection status with an Arduino
-      #     #  -1 = connection unavailable
-      #     #   0 = establishing connection
-      #     #   1 = connection established
-      #     #   2 = connection completed
-      #     # connection_status = 0
-      # end
-    end
-    
     def self.request(message, timeout=2)
         debug_code = true
-        if debug_code then puts "[ArduinoClient/request] - checking if message is RestfulMessage\n#{message.full_request}" end
+        if debug_code then puts "[ArduinoClient/request] - checking if message is RestfulMessage" end
 
         return -1 unless message.is_a? RestfulRequest
         message = message
-        if debug_code then puts "[ArduinoClient/request] - starting to process message\n" end
     
     
         # ARDUINO_CONNECTION thread
@@ -42,12 +29,12 @@ class ArduinoClient
                 connection_status = socket.connect(Socket.pack_sockaddr_in(request_data.address[:port], addr[0][3]))
                 if Thread.current[:status].to_i == 0
                     Thread.current[:status] = 1
-                    if debug_code then puts "[ArduinoClient/request/arduino_connection] - about to request \n" end
-                   	socket.write( "GET / HTTP/1.0\r\n\r\n" )
+                    if debug_code then puts "[ArduinoClient/request/arduino_connection] - sending request \n" end
+                   	socket.write( request_data.restful_request )
                    	Thread.current[:response] = socket.read
                     socket.close
                     Thread.current[:status] = 2
-                    if debug_code then puts "[ArduinoClient/request/arduino_connection] - message read \n" end
+                    if debug_code then puts "[ArduinoClient/request/arduino_connection] - response received \n" end
                 end
               rescue => e
                   puts "[ArduinoClient/request/arduino_connection] ERROR: \n #{e.message} \n#{e.backtrace}"
@@ -69,7 +56,7 @@ class ArduinoClient
                       if current_time < start_time then current_time += 60 end
                       if (current_time > end_time) then raise TimeoutException, "Taking too long." end
                     else
-                      if debug_code then puts "[ArduinoClient/request/timer] Timer: stopping thread loop : status #{con_thread[:status]}" end
+                      if debug_code then puts "[ArduinoClient/request/timer] Connection made, making request, stopping timer" end
                       break
                     end
                 end
@@ -93,7 +80,7 @@ class ArduinoClient
         if !arduino_connection.alive? then arduino_connection.terminate end
 
         if debug_code 
-          puts "***[ArduinoClient/request]: returning data from arduino socket" 
+          puts "[ArduinoClient/request]: returning data from arduino socket" 
         end
         response
     end

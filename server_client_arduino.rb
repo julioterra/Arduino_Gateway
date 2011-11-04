@@ -3,6 +3,7 @@ require 'open-uri'
 require './requests.rb'
 require './arduino_client.rb'
 require './public_server.rb'
+require './controller.rb'
 include Socket::Constants
 
 # create a thread for the server
@@ -22,7 +23,8 @@ public_port_number = 7996
 # p arduino_page.read  # returns main content 
 # p arduino_page.meta  # returns content type
 
-arduino_server = PublicServer.new(public_port_number, arduino_port_number)
-arduino_server.register_arduino(arduino_host_ip)
-arduino_server.run
+arduino_server = PublicServer.new(public_port_number)
+controller = ArduinoController.new(arduino_server)
+controller.register_arduino({name: "worktable", address: {host_ip: arduino_host_ip, port: arduino_port_number}})
+arduino_server.run(controller)
 
