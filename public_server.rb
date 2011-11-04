@@ -9,26 +9,26 @@ class PublicServer
     attr_accessor :arduino_list, :debug_code, :server_running
 
     def initialize (public_port)
-        puts "[ArduinoServer:new] ******************************"
-        puts "[ArduinoServer:new] starting up the ArduinoServer"
-        # puts "[ArduinoServer:new] files in data directory: #{`ls ./data/`}"
-        puts "[ArduinoServer:new] ******************************"
+        puts "[PublicServer:new] ******************************"
+        puts "[PublicServer:new] starting up the PublicServer"
 
         # ip address and host numbers
         @public_port_number = public_port.to_i
-
         @connections = {}
         @debug_code = true      
-
         @client_count = 0
+
+        # start public server in a block to capture any issues associated 
+        # with the connection.
         begin        
             @server = TCPServer.new(@public_port_number)  
             @server_running = true
           rescue => e
-            puts "[ArduinoServer:new] RESCUE: error with server #{e.message}"
+            puts "[PublicServer:new] RESCUE: error with public server #{e.message}"
         end
                       
-        puts "[ArduinoServer:new] finished start-up"
+        puts "[PublicServer:new] start up completed"
+        puts "[PublicServer:new] ******************************"
     end
     
     def run(controller=-1)

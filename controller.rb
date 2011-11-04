@@ -24,7 +24,6 @@ class ArduinoController
       		end
       	end
       end
-
     end
 
     # for setting the arduino host ip
