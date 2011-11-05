@@ -25,6 +25,6 @@ public_port_number = 7996
 
 arduino_server = PublicServer.new(public_port_number)
 controller = ArduinoController.new(arduino_server)
-controller.register_arduino({name: "worktable", address: {host_ip: arduino_host_ip, port: arduino_port_number}})
-arduino_server.run(controller)
+controller.register_arduino({name: "worktable", content: {ip: arduino_host_ip, port: arduino_port_number}})
+arduino_server.run()
 

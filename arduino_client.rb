@@ -20,7 +20,7 @@ class ArduinoClient
             Thread.current[:status] = 0
             Thread.current[:response] = 0
 
-            addr = Socket.getaddrinfo(request_data.address[:ip_host], nil)  
+            addr = Socket.getaddrinfo(request_data.address[:ip], nil)  
             socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
 
             if debug_code then puts "[ArduinoClient/request/arduino_connection] - trying to connect\n" end

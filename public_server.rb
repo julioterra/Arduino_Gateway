@@ -17,6 +17,7 @@ class PublicServer
         @connections = {}
         @debug_code = true      
         @client_count = 0
+        @controller = -1
 
         # start public server in a block to capture any issues associated 
         # with the connection.
@@ -31,12 +32,16 @@ class PublicServer
         puts "[PublicServer:new] ******************************"
     end
     
-    def run(controller=-1)
-        if controller == -1 ; return ; end
+    def register_controller(controller)
+        @controller = controller
+    end
+    
+    def run(controller=@controller)
+        unless controller.is_a? ArduinoController ; return ; end
         debug_code = true
-
         if debug_code ; puts "[PublicServer:run] starting to run - server status: #{@server_running}" ; end
 
+        @controller = controller
         # while the server is accepting clients 
         while (@server_running && client = @server.accept) 
           	@client_count += 1
@@ -57,20 +62,19 @@ class PublicServer
                 if debug_code ; puts "[PublicServer:run] request length: #{client_request.length}" ; end
 
                 # register request, along with id, with the controller
-                client_connection.puts controller.register_request(client_request, Thread.current[:id])
+                client_connection.puts @controller.register_request(client_request, Thread.current[:id])
             end
         end
     end
     
     # callback method used by controller to respond to requests with data from the arduinos
     def respond (response, id)
-      if debug_code ; puts "[PublicServer:respond] id #{p @connections.size}" ; end
+      if debug_code ; puts "[PublicServer:respond] id: #{id}, response empty? #{response.empty?}" ; end
       
-      @connections[id].puts response
+      @connections[id].puts response unless response.empty?
       @connections[id].close   
       @connections.delete(id)   
 
-      if debug_code ; puts "[PublicServer:respond] id #{p @connections.size},  #{p @connections}" ; end
     end
     
     def stop

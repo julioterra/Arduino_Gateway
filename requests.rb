@@ -3,8 +3,17 @@ class RestfulRequest
    attr_accessor :method_type, :format, :options, :address, :id
    attr_reader :resources_list, :resources
    
-   # initilize method called to create new message
-   def initialize(id="", method="", resources="", format="", address={:ip_host => "0.0.0.0", :port => -1})
+   # initilize method called to create a new message object
+   # the port number in the address hash is set to -1. Here is a table
+   # that explains the port value meaning:
+   #      (1) greater than 0: these port numbers refer to actual addresses 
+   #          and so if the port number is greater than 0 than address can 
+   #          considered to be SET
+   #      (2) -1: port address has not been set yet
+   #      (3) -11: request should be ignored without raising exceptions or redirecting
+   #      (3) -12: request return an exception in the form of a missing resource page
+   
+   def initialize(id="", method="", resources="", format="", address={:ip => "0.0.0.0", :port => -1})
       puts "[RestfulRequests:initialize] initializing server request object"
         @id = id
         @method_type = method
@@ -137,7 +146,7 @@ class RestfulRequest
   end
 
   def full_address
-     return "http://" + @address[:ip_host].to_s + ":" + @address[:port].to_s 
+     return "http://" + @address[:ip].to_s + ":" + @address[:port].to_s 
   end
 
   def restful_request
