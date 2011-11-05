@@ -5,7 +5,7 @@ require './requests.rb'
 
 class ArduinoClient
 
-    def self.request(message, timeout=2)
+    def self.request(message, timeout=3)
         debug_code = true
         if debug_code then puts "[ArduinoClient/request] - checking if message is RestfulMessage" end
 
@@ -28,10 +28,10 @@ class ArduinoClient
             begin
                 connection_status = socket.connect(Socket.pack_sockaddr_in(request_data.address[:port], addr[0][3]))
                 if Thread.current[:status].to_i == 0
-                    Thread.current[:status] = 1
                     if debug_code then puts "[ArduinoClient/request/arduino_connection] - sending request \n" end
                    	socket.write( request_data.restful_request )
                    	Thread.current[:response] = socket.read
+                    Thread.current[:status] = 1
                     socket.close
                     Thread.current[:status] = 2
                     if debug_code then puts "[ArduinoClient/request/arduino_connection] - response received \n" end

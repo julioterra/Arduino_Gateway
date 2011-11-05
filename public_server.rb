@@ -77,10 +77,15 @@ class PublicServer
 
     end
     
-    def stop
-      @server_running = false
-			@server.close 
-			exit
+    def stop(id=-1)
+      if (id == -1)
+            @server_running = false
+      			@server.close 
+      			exit
+  			else
+    			  @connections[id].close   
+            @connections.delete(id)   
+			  end
     end
        
 end

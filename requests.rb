@@ -62,26 +62,32 @@ class RestfulRequest
   
   def clean_resource_array(resource_in)
       # remove any empty resources from the array.
-      resource_in = resource_in.select do |resource|
+      resource_clean = resource_in.select do |resource|
           !resource.empty?
       end
+      puts "[RestfulRequests:clean_resource_array] original: #{resource_in}"
       
       # add a "/" to the start of each element in the array
-      resource_clean = resource_in.map do |resource| 
-          if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
-      end
-      
-      # add a "/" element to the end of the array if the last element ended 
-      # with this character
-      if resource_clean.last.to_s.end_with?('/')
-          resource_clean << '/' 
-      end
-      
-      # check all but the last element in the array to make sure that they
-      # do not end with a "/"
-      resource_clean[0..-2].each do |resource| 
-          if !resource.chomp.ends_with?('/') ; resource = resource[0..-2] ; end
-      end
+      # resource_clean = resource_in.map do |resource| 
+      #     if !resource.chomp.start_with?('/') ; resource = '/' + resource ; end
+      # end
+      # puts "[RestfulRequests:clean_resource_array] add '\/' at beginning: #{resource_clean}"
+      # 
+      # # add a "/" element to the end of the array if the last element ended 
+      # # with this character
+      # if resource_clean.last.to_s.end_with?('/')
+      #     resource_clean << "/" 
+      # end
+      # puts "[RestfulRequests:clean_resource_array] adds an array element with '\/': #{resource_clean}"
+      # 
+      # # check all but the last element in the array to make sure that they
+      # # do not end with a "/"
+      # resource_clean.each do |resource| 
+      #     if resource.chomp.ends_with?('/') && !resource.equal?(resource_clean[resource_clean.length-1])
+      #       resource = resource[0..-2]
+      #     end
+      # end
+      # puts "[RestfulRequests:clean_resource_array] remove '\/' from end: #{resource_clean}"
 
       resource_clean
   end
