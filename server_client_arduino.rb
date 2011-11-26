@@ -14,6 +14,7 @@ end
 
 arduino_host_ip = '192.168.2.200'
 arduino_port_number = 7999
+# public_port_number = 80
 public_port_number = 7996
 
 # ALTERNATE WAY TO GET DATA FROM ARDUINO 
@@ -23,8 +24,7 @@ public_port_number = 7996
 # p arduino_page.read  # returns main content 
 # p arduino_page.meta  # returns content type
 
-arduino_server = PublicServer.new(public_port_number)
-controller = ArduinoController.new(arduino_server)
-controller.register_arduino({name: "worktable", content: {ip: arduino_host_ip, port: arduino_port_number}})
+arduino_server = ArduinoGateway::PublicServer.new(public_port_number)
+controller = ArduinoGateway::ArduinoController.new(arduino_server)
 arduino_server.run()
 

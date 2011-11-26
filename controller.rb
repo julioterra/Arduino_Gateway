@@ -1,118 +1,103 @@
 require 'socket'
 require 'open-uri'
+require 'json'
 require './requests.rb'
 require './arduino_client.rb'
 require './public_server.rb'
 require './controller.rb'
 
-class ArduinoController
+module ArduinoGateway
+
+  class ArduinoController
     
-    def initialize(public_server)
-  		puts "[ArduinoController:initializer] initializing the Arduino controller"
-      @public_server = public_server
-      @public_server.register_controller(self)
+      def initialize(public_server)
+          @public_server = public_server
+          @public_server.register_controller(self)
+          @addresses = []
+          error_msgs_init
 
-      # the port number in the address hash is set based on:
-      #      (1) greater than 0: these port numbers refer to actual addresses 
-      #          and so if the port number is greater than 0 than address can 
-      #          considered to be SET
-      #      (2) -1: port address has not been set yet
-      #      (3) -11: request should be ignored without raising exceptions or redirecting
-      #      (3) -12: request return an exception in the form of a missing resource page
-      @addresses = {"wait" => {:ip => "0.0.0.0", :port => -1},
-                    "ignore" => {:ip => "0.0.0.0", :port => -11},
-                    "error" => {:ip => "0.0.0.0", :port => -12}}
-      @route
+          @debug_code = true
+
+          # @resource_device_list = []    # holds hash with address/id, name and status for each device
+          # @resource_service_list = []   # holds hash with id, and name for each service
+          # @relationships = []           # holds hash with device id, service id, status, type, and range
       
-      # create a thread to listen to keyboard commands
-      @key_listener = Thread.new do
-    		puts "[ArduinoController:initializer:key_listener] starting key listener thread"
-      	while(@public_server.server_running)
-      		input = gets.chomp
-      		puts ": processing your input [#{input}]"
-      		if input.include?("X") then
-      			puts "[ArduinoController:initializer:key_listener] closing port #{@public_port_number} and exiting app..."
-      			@public_server.stop
-      		end
-      	end
-      end
-    end
-
-    # register new arduino addresses (id, ip and port)
-    # saves new address in the @addresses array. Input should 
-    # be a hash key with two value:
-    #     :name - holds the name of the arduino
-    #     :content - holds a hash key with :ip and :port key/value pairs
-    def register_arduino(address)
-      unless address.empty? || !address.is_a?(Hash)
-          begin
-              @addresses.merge!({address[:name] => address[:content]}) 
-              puts "[ArduinoController:register_arduino] finished registering new arduino #{p @addresses}"
-          rescue => e
-              puts "[ArduinoController:register_arduino] ERROR: unable to register new arduino: #{e.message}"
+          # create a thread to listen to keyboard commands
+          @key_listener = Thread.new do
+          		puts "[ArduinoController:initializer] starting key listener thread"
+            	while(@public_server.server_running)
+              		input = gets.chomp
+              		puts "[ArduinoController:@key_listener] processing your input [#{input}]"
+              		if input.include?("X") then
+                			puts "[ArduinoController:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
+                			@public_server.stop
+                			exit
+              		end
+            	end
+          end
+          
+          # register arduinos specified in the arduino_addrs.json file
+          File.open "arduino_addrs.json" do |json_file|
+              JSON.parse(json_file.read).each do |cur_set|
+                  cur_set = {ip: cur_set["ip"], port: cur_set["port"]}
+                  register_arduino(cur_set)
+              end
           end
       end
-    end
 
-    # request data from one of the registered arduino
-     def request(request)
 
-       if request.address.equal?(@addresses["ignore"])
-           puts "[ArduinoController:request] -#{request.id.to_i}- ignored address: #{request.full_request.chomp}"           
-           response = ""
-       else
-            begin
-                puts "[ArduinoController:request] -#{request.id.to_i}- valid address: \n#{request.full_request.chomp}"
-         		    response = ArduinoClient.request(request)
-     		     rescue Exception => e
-                puts "[ArduinoController:request] -#{request.id.to_i}- ERROR: #{e.message}"
-                response = "<p>Sorry the connection timed out. We are having some server issues. " +
-                                         "Be back up soon. Thanks for visiting</p>" +
-                                         "<p>It's #{Time.now}.</p>"
-   		     end
-       end
-	     response
-    end
+      # REGISTER_ARDUINO
+      # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
+      def register_arduino(address)
+          return unless address_valid?(address)
+          @addresses << address
+          puts "[ArduinoController:register_arduino] registered new arduino #{address}"
+      end
+
+
+      # SEND_ARDUINO_REQUEST
+      # request data from one of the registered arduinos; accepts a request obj
+      def send_arduino_request(request)          
+          return @address_error unless address_valid?(request.address)
+       		ArduinoClient.request(request)
+          rescue Exception => e; "#{@timeout_error}, error message #{e}"
+      end
     
     
-    def register_request(new_request, request_id)
-      debug_code = true
+      # REGISTER_PUBLIC_REQUEST
+      # receives request from the public server for processing; accepts request (string) and id (int)
+      def register_public_request(new_request, request_id)      
+          if @debug_code ;	puts "[ArduinoController:register_public_request] request registered" ; end
+
+          # get request data from regex match on request
+        	# but first set the regex syntax for matching GET requests 
+        	get_request_syntax = /(GET) (\/.*?) (\S*)/	
+        	client_get_request_match = get_request_syntax.match(new_request)
+        	response = nil
+
+        	# if regex match was found then process the message
+        	if (client_get_request_match)
+              request = RestfulRequest.new(request_id, $1, $2, $3, @addresses[0])
+              response = self.send_arduino_request(request)            
+        	end
+  
+          @public_server.respond(response, request.id)
+      end
+
+
+    private
+
+      # ADDRESS_VALID?
+      # checks address validity by confirming data type, and presence of ip and port key
+      def address_valid?(address)
+          address.is_a?(Hash) && address.include?(:ip) || address.include?(:port)
+      end
       
-      if debug_code ;	puts "[ArduinoController:register_request] got here" ; end
-      # get request data from regex match on request
-    	# but first set the regex syntax for matching GET requests 
-    	get_request_syntax = /(GET) (\/.*?) (\S*)/	
-    	client_get_request_match = get_request_syntax.match(new_request)
-    	response = -1
-
-    	# if regex match was found then process the message
-    	if (client_get_request_match)
-          request = RestfulRequest.new(request_id, $1, $2, $3)
-
-          if debug_code 
-          		puts "[ArduinoController:register_request] -#{request.id.to_i}- matches syntax: "
-  		    end
-
-      		# check for resources that should be ignored
-      		if (request.resources =~ /\/favicon.ico/) 
-              request.address = @addresses["ignore"]
-
-          # process resources that should be routed
-          else
-              request.address = @addresses["worktable"]
-      		end
-      		
-          # routed_request = self.route(request)
-          response = self.request(request)
-    	end
-      if debug_code ;	puts "[ArduinoController:register_request] -#{request.id.to_i}- calling @public_server.respond method" ; end
-
-      @public_server.respond(response, request.id)
-    end
+      def error_msgs_init
+          @address_error = "<p>Sorry the connection was unsuccessful. There was an issue with the arduino address."
+          @timeout_error = "<p>Sorry the connection timed out. We are having some server issues. " +
+                     "Be back up soon. Thanks for visiting</p> <p>It's #{Time.now}.</p>"
+      end
     
-    def route(request)
-        
-        request
-    end
-    
+  end
 end

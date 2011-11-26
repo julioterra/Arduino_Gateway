@@ -5,87 +5,93 @@ require './arduino_client.rb'
 require './public_server.rb'
 require './controller.rb'
 
-class PublicServer 
-    attr_accessor :arduino_list, :debug_code, :server_running
+module ArduinoGateway
 
-    def initialize (public_port)
-        puts "[PublicServer:new] ******************************"
-        puts "[PublicServer:new] starting up the PublicServer"
+  # PublicServer is responsible for handling clients connections, reading client requests 
+  # and passing on those requests to a controller for processing
+  class PublicServer 
+      attr_accessor :server_running, :public_port_number
 
-        # ip address and host numbers
-        @public_port_number = public_port.to_i
-        @connections = {}
-        @debug_code = true      
-        @client_count = 0
-        @controller = -1
+      def initialize (public_port)
+          # initialize the port number, connection hash, and client count
+          @public_port_number = public_port.to_i
+          @connections = {}
+          @client_count = 0
 
-        # start public server in a block to capture any issues associated 
-        # with the connection.
-        begin        
-            @server = TCPServer.new(@public_port_number)  
-            @server_running = true
-          rescue => e
-            puts "[PublicServer:new] RESCUE: error with public server #{e.message}"
-        end
+          # when debug_code variable is set to true server will print debug messages to terminal
+          @debug_code = true      
+
+          # start public server in a block to capture any issues associated with connection.
+          begin        
+              @server = TCPServer.new(@public_port_number)  
+              @server_running = true
+            rescue => e
+              puts "[PublicServer:new] ERROR: not able to start up TCP Server #{e.message}"
+          end
                       
-        puts "[PublicServer:new] start up completed"
-        puts "[PublicServer:new] ******************************"
-    end
+          if @debug_code; puts "[PublicServer:initialize] PublicServer initialized"; end
+      end
     
-    def register_controller(controller)
-        @controller = controller
-    end
+
+      # register controller with public server; controller must include a callback method
+      # called register_public_request.
+      def register_controller(controller)
+          @controller = controller
+      end
     
-    def run(controller=@controller)
-        unless controller.is_a? ArduinoController ; return ; end
-        debug_code = true
-        if debug_code ; puts "[PublicServer:run] starting to run - server status: #{@server_running}" ; end
-
-        @controller = controller
-        # while the server is accepting clients 
-        while (@server_running && client = @server.accept) 
-          	@client_count += 1
-            # add new thread to the connections hash, 
-            # where it is stored based on id number
-            @connections.merge!({@client_count => client})
-            if debug_code ; puts "[PublicServer:run] create new connection: #{p @connections}" ; end
-
-            # create a new thread to handle each incoming client request
-            # first increment the client count by one (this is used to set the current client id)
-      	    connection = Thread.new client, @client_count do |client_connection, client_count|
-              	Thread.current[:id] = client_count
-                # Thread.current[:client_connection] = client_connection
-                if debug_code ; puts "[PublicServer:run] NEW client ID: #{Thread.current[:id]}" ; end
-                
-                # read request from client and print the content's length
-              	client_request = client_connection.recvfrom(1500)[0].chomp.to_s
-                if debug_code ; puts "[PublicServer:run] request length: #{client_request.length}" ; end
-
-                # register request, along with id, with the controller
-                client_connection.puts @controller.register_request(client_request, Thread.current[:id])
-            end
-        end
-    end
     
-    # callback method used by controller to respond to requests with data from the arduinos
-    def respond (response, id)
-      if debug_code ; puts "[PublicServer:respond] id: #{id}, response empty? #{response.empty?}" ; end
-      
-      @connections[id].puts response unless response.empty?
-      @connections[id].close   
-      @connections.delete(id)   
+      # run the public_server; method responsible for accepting new clients, reading
+      # client requests and registering those requests with the controller.
+      def run()
+          unless @controller.respond_to?(:register_public_request) 
+              puts "[PublicServer:run] ERROR: controller does not have register_public_request callback method"            
+              return
+          end
+  
+          if @debug_code
+              puts "[PublicServer:initialize] PublicServer listening to port #{@public_port_number}"
+          end
+  
+          # while the server is accepting clients 
+          while (client = @server.accept) 
+              # update the client_count variable
+            	@client_count += 1            	
+              if @debug_code; puts "[PublicServer:run] ID: #{@client_count}, new client at socket: #{client} "; end
 
-    end
+              # create a new thread to handle each incoming client request
+        	    connection = Thread.new client, @client_count do |client_connection, client_count|
+                  Thread.current[:client] = client_connection             
+                	client_request = client_connection.recvfrom(2000)[0].chomp.to_s
+                  @controller.register_public_request(client_request, client_count)
+              end
+              
+              # add thread to the connections hash list
+              @connections.merge!({@client_count => connection})                 
+          end
+      end
     
-    def stop(id=-1)
-      if (id == -1)
-            @server_running = false
-      			@server.close 
-      			exit
-  			else
-    			  @connections[id].close   
-            @connections.delete(id)   
-			  end
-    end
+
+      # callback method used by controller to respond to client requests once data 
+      # is received from the arduinos
+      def respond(response, id)
+        @connections[id][:client].puts response unless response.empty?
+        stop(id)
+      end
+    
+
+      # method that kills client connections from @connections hash list and turns 
+      # off  server if no connection id is provided.
+      def stop(id = -1)
+          if id == -1 
+              @server.close 
+              @server_running = false
+    			else
+              @connections[id][:client].close   
+              @connections[id].kill   
+              @connections.delete(id)   
+  			  end
+      end
        
+  end
+
 end
