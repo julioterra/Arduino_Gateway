@@ -1,6 +1,7 @@
 require 'socket'
 require 'open-uri'
 require 'json'
+require './helpers.rb'
 require './requests.rb'
 require './arduino_client.rb'
 require './public_server.rb'
@@ -57,9 +58,9 @@ module ArduinoGateway
 
       # SEND_ARDUINO_REQUEST
       # request data from one of the registered arduinos; accepts a request obj
-      def send_arduino_request(request)          
-          return @address_error unless address_valid?(request.address)
-       		ArduinoClient.request(request)
+      def send_arduino_request(new_request)          
+          return @address_error unless address_valid?(new_request.address)
+       		ArduinoClient.request(new_request)
           rescue Exception => e; "#{@timeout_error}, error message #{e}"
       end
     
@@ -71,13 +72,14 @@ module ArduinoGateway
 
           # get request data from regex match on request
         	# but first set the regex syntax for matching GET requests 
-        	get_request_syntax = /(GET) (\/.*?) (\S*)/	
+        	get_request_syntax = /GET|POST/	
         	client_get_request_match = get_request_syntax.match(new_request)
         	response = nil
 
         	# if regex match was found then process the message
         	if (client_get_request_match)
-              request = RestfulRequest.new(request_id, $1, $2, $3, @addresses[0])
+              if @debug_code ;	puts "[ArduinoController:register_public_request] request matched" ; end
+              request = RestfulRequest.new(request_id, new_request, @addresses[0])
               response = self.send_arduino_request(request)            
         	end
   

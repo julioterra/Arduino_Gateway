@@ -1,74 +1,48 @@
 module ArduinoGateway
 
   class RestfulRequest
-     attr_accessor :method_type, :format, :options, :address, :id
-     attr_reader :resources_list, :resources
+      attr_accessor :id, :method_type, :options, :address
+      attr_reader :resources_list, :resources
    
-     # initilize method called to create a new message object
-     # the port number in the address hash is set to -1. Here is a table
-     # that explains the port value meaning:
-     #      (1) greater than 0: these port numbers refer to actual addresses 
-     #          and so if the port number is greater than 0 than address can 
-     #          considered to be SET
-     #      (2) -1: port address has not been set yet
-     #      (3) -11: request should be ignored without raising exceptions or redirecting
-     #      (3) -12: request return an exception in the form of a missing resource page
-   
-     def initialize(id="", method="", resources="", format="", address={:ip => "0.0.0.0", :port => -1})
-        puts "[RestfulRequests:initialize] initializing server request object"
+      # initilize method called to create a new message object   
+      def initialize(id="", request="", address={:ip => "0.0.0.0", :port => -1})
+          @debug_code = true
+
           @id = id
-          @method_type = method
-          @format = format
-          @resources = resources
+
+          get_request_syntax = /(?:(GET|POST) (\/.*?) (.*$)\n)((?:^\S*: .*$\n)*)/	
+          client_get_request_match = get_request_syntax.match(request)
+          self.method_type = $1
+          self.resources = $2
+          self.options = $3
+
           @address = address
-          @options = {}
-          self.resources_list = @resources
-          puts "[RestfulRequests:initialize] finished initializing, - num of resource: #{@resource_list.length}"
-     end
+          puts "[RestfulRequests:initialize] initialized server request, method: #{@method_type}, resources: #{@resources}"
+      end
    
      def resources=(resources_in)
        # using resource_list= method to assign the resouce_list and resource variable
        # because this method is able to handle both array and string input
-       self.resource_list = @resources
+       self.resources_list = resources_in
      end
 
-     # method can take input that is an array or string and converts in order to 
-     # assign the proper values for the @resource and @resource_list variables.
-     def resources_list=(resource_in)
-       debug_code = false
-       if debug_code ; puts "[RestfulRequests:resource_list:0] creating a resource object: #{resource_in}"; end
-
-       #handle string input
-       if (resource_in.kind_of? String)
-           # create a list of resources (disregard first position, which is blank) 
-           # then reformat each entry to include a starting forward slash
-           # lastly, add an ending forward slash, if appropriate
-           @resource = resource_in
-           @resource_list = clean_resource_array(@resource.split('/'))
-           if debug_code ; puts "[RestfulRequests:resource_list:2] string input : #{@resource_list}"; end
-
-        #handle array input
-        elsif (resource_in.kind_of? Array)
-            # go through each element in the input array using map function
-            # make sure all elements start with a forward slash before saving
-            @resource_list = clean_resource_array(resource_in)
-            @resources = @resource_list.join
-            if debug_code ; puts "[RestfulRequests:resource_list:3] array input : #{@resource_list}"; end
+    # method can take input that is an array or string and converts in order to 
+    # assign the proper values for the @resource and @resource_list variables.
+    def resources_list=(resource_in)
+        if resource_in.is_a? String
+            @resources = resource_in
+            @resources_list = resource_in.split("/").select { |resource| !resource.empty? }
+        elsif resource_in.is_a? Array
+            @resources_list = resource_in.select { |resource| !resource.empty? }
+            @resources = @resource_list.join('/')
         end
-        @resource_list
+        @resources_list
         rescue => e
-          puts "[RestfulRequests:resource_list] RESCUE: #{e.message}", e.backtrace
-          @resource_list            
-    end ## END :resources_list
-  
-    def clean_resource_array(resource_in)
-        # remove any empty resources from the array.
-        resource_clean = resource_in.select do |resource|
-            !resource.empty?
-        end
-        resource_clean
+            puts "[RestfulRequests:resource_list] RESCUE: #{e.message}", e.backtrace
+            @resources_list            
     end
-  
+
+    
     # accepts a string, array or hash to be used for setting the 
     # @options hash
     def options=(*option_in)
@@ -83,34 +57,30 @@ module ArduinoGateway
       
         # if new_data variable is a string then convert it into an array
         # each item is separated by a ",", and whitespace is removed
-        if (new_data.kind_of? String)
+        if new_data.is_a? String 
            new_data = new_data.split(",").chomp    
         end    
       
         # if new_data variable is an array then convert it into a hash
         # make sure that array is not empty, then process the data
-        if (new_data.is_a? Array)
-
-            # return an empty hash if the new_data array is empty
+        if new_data.is_a? Array
             return new_hash if new_data.empty?
 
             # if array has more than 1 element then convert into a hash
             # check whether each array element contains a key/value pair
             # then create a hash with the arrays contents
-            if new_data.length > 1
-                if new_data[0].to_s.includes? ":"
-                    new_data.each do |data| 
-                        data.to_s = data.split(":")
-                    end
-                    new_data.flatten!
-                end
-                new_data.slice(2) do |first, second|
-                    new_hash[first] = second
-                end
+            new_data.map! do |data| data = data.to_s end
+            new_data.select! do |data| data.include?(":") || data.include?("=>") end
+            new_data.map! do |data| 
+                if data.include?("{") || data.include?("}") then data.gsub!(/ ?{|}/,"") end
+                if data.include?(":") & data.include?("=>") then data = data.split("=>") 
+                else data = data.split(/\=\> ?|\: ?/) end
+                new_hash[data[0]] = data[1]
+            end
 
             # if array has only one element then check whether it is a
             # hash list. If so, assign the hash to the new_data variable
-            elsif new_data[0].is_a? Hash
+            if new_data[0].is_a? Hash
                 new_data = new_data[0] 
             end
         end
@@ -129,17 +99,18 @@ module ArduinoGateway
     end
 
     def full_address
-       return "http://" + @address[:ip].to_s + ":" + @address[:port].to_s 
+       return "http://#{@address[:ip].to_s}:#{@address[:port].to_s}"
     end
 
     def restful_request
-     return_string = @method_type.upcase + " " + @resources + " " + @format + "\r\n\r\n"
+     return_string = "#{@method_type.upcase} #{@resources}\r\n\r\n"
+     puts "[RestfulRequests:restful_request] #{return_string}"
      return_string
     end
 
     def full_request
      return_string = self.full_address + " " +  @method_type.upcase + " " + 
-                     @resources + " " + @format + "\r\n\r\n"
+                     @resources + "\r\n\r\n"
     end
 
 
