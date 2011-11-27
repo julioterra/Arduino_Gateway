@@ -39,12 +39,13 @@ module ArduinoGateway
                       if debug_code then puts "[ArduinoClient/request/arduino_connection] - response received \n" end
                   end
                 rescue => e
-                    puts "[ArduinoClient/request/arduino_connection] ERROR: \n #{e.message} \n#{e.backtrace}"
+                    puts "[ArduinoClient/request/arduino_connection] ERROR: #{e.message}"
               end
           end
 
 
           if debug_code then puts "[ArduinoClient/request] - starting to time #{Time.now.sec}" end
+
           # TIMER thread
           # thread responsible ending the connection attempt after a pre-specified timeout
           ######## save this as a proc or lambda
