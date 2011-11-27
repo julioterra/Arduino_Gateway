@@ -2,7 +2,7 @@ module ArduinoGateway
 
   class RestfulRequest
       attr_accessor :id, :method_type, :address
-      attr_reader :resources_list, :resources, :options
+      attr_reader :resources_list, :resources, :options, :body
    
       # initilize method called to create a new message object   
       def initialize(id="", request="", address={:ip => "0.0.0.0", :port => -1})
@@ -68,7 +68,7 @@ module ArduinoGateway
     end
 
     def full_request
-     return_string = "#{self.full_address} #{@method_type.upcase} #{@resources}\r\n\r\n"
+     return_string = "#{self.full_address} #{self.restful_request} \r\n#{@options} \r\n\r\n#{@body}"
     end
 
 

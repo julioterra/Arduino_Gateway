@@ -78,7 +78,7 @@ module ArduinoGateway
 
         	# if regex match was found then process the message
         	if (client_get_request_match)
-              if @debug_code ;	puts "[ArduinoController:register_public_request] request matched" ; end
+              if @debug_code ;	puts "[ArduinoController:register_public_request] request matched \n#{new_request}" ; end
               request = RestfulRequest.new(request_id, new_request, @addresses[0])
               response = self.send_arduino_request(request)            
         	end
