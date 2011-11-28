@@ -43,7 +43,7 @@ module ArduinoGateway
       # run the public_server; method responsible for accepting new clients, reading
       # client requests and registering those requests with the controller.
       def run()
-          unless @controller.respond_to?(:register_public_request) 
+          unless @controller.respond_to?(:process_public_request) 
               puts "[PublicServer:run] ERROR: controller does not have register_public_request callback method"            
               return
           end
@@ -62,7 +62,7 @@ module ArduinoGateway
         	    connection = Thread.new client, @client_count do |client_connection, client_count|
                   Thread.current[:client] = client_connection             
                 	client_request = client_connection.recvfrom(2000)[0].chomp.to_s
-                  @controller.register_public_request(client_request, client_count)
+                  @controller.process_public_request(client_request, client_count)
               end
               
               # add thread to the connections hash list

@@ -5,12 +5,13 @@ require './helpers.rb'
 require './requests.rb'
 require './arduino_client.rb'
 require './public_server.rb'
-require './controller.rb'
+require './resource_devices.rb'
 
 module ArduinoGateway
 
   class ArduinoController
-    
+      include ArduinoGateway::Helpers
+      
       def initialize(public_server)
           @public_server = public_server
           @public_server.register_controller(self)
@@ -50,51 +51,51 @@ module ArduinoGateway
       # REGISTER_ARDUINO
       # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
       def register_arduino(address)
-          return unless address_valid?(address)
-          @addresses << address
-          puts "[ArduinoController:register_arduino] registered new arduino #{address}"
+        return unless address_valid?(address)
+        @addresses << address
+        register_arduino_resources(address)
+        puts "[ArduinoController:register_arduino] registered new arduino #{address}"
+      end
+
+
+      def register_arduino_resources(address)
+        RestfulRequest.new(-1, "GET /resource_info", address)
       end
 
 
       # SEND_ARDUINO_REQUEST
       # request data from one of the registered arduinos; accepts a request obj
-      def send_arduino_request(new_request)          
-          return @address_error unless address_valid?(new_request.address)
+      def make_device_request(new_request)          
+          return error_msg(:arduino_address) unless address_valid?(new_request.address)
        		ArduinoClient.request(new_request)
-          rescue Exception => e; "#{@timeout_error}, error message #{e}"
+          rescue Exception => error; return error_msg(:timeout, error)
       end
     
     
       # REGISTER_PUBLIC_REQUEST
       # receives request from the public server for processing; accepts request (string) and id (int)
-      def register_public_request(new_request, request_id)      
-          if @debug_code ;	puts "[ArduinoController:register_public_request] request registered" ; end
-
-          # get request data from regex match on request
-        	# but first set the regex syntax for matching GET requests 
-        	get_request_syntax = /GET|POST/	
-        	client_get_request_match = get_request_syntax.match(new_request)
-        	response = nil
-
-        	# if regex match was found then process the message
-        	if (client_get_request_match)
-              if @debug_code ;	puts "[ArduinoController:register_public_request] request matched \n#{new_request}" ; end
-              request = RestfulRequest.new(request_id, new_request, @addresses[0])
-              response = self.send_arduino_request(request)            
+      def process_public_request(new_request, request_id)      
+        	if (new_request.match /GET|POST/)
+            @public_server.respond data_from_devices(request_id, new_request), request_id
+          else 
+            @public_server.respond error_msg(:request_not_supported), request_id
         	end
-  
-          @public_server.respond(response, request.id)
       end
 
 
-    private
-
-      # ADDRESS_VALID?
-      # checks address validity by confirming data type, and presence of ip and port key
-      def address_valid?(address)
-          address.is_a?(Hash) && address.include?(:ip) || address.include?(:port)
+      def data_from_devices(request_id, new_request)
+    	  # Parse request
+    	  #   Determine what data needs to be captured from each Arduino
+    	  #   Create a RestfulRequest to send to appropriate Arduino (create an array)
+    	  #   Send requests to each appropriate arduino
+    	  #   Compile response to return via public server
+    	  #   Respond via public server
+        new_request = RestfulRequest.new(request_id, new_request, @addresses[0])  
+        make_device_request(new_request)      
+        # [data_from_arduino(new_request), new_request.id]      
       end
-      
+
+
       def error_msgs_init
           @address_error = "<p>Sorry the connection was unsuccessful. There was an issue with the arduino address."
           @timeout_error = "<p>Sorry the connection timed out. We are having some server issues. " +

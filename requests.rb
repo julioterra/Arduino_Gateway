@@ -1,6 +1,10 @@
+require './helpers.rb'
+
 module ArduinoGateway
 
   class RestfulRequest
+      include ArduinoGateway::Helpers
+
       attr_accessor :id, :method_type, :address
       attr_reader :resources_list, :resources, :options, :body
    

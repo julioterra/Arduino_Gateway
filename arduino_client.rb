@@ -12,7 +12,7 @@ module ArduinoGateway
           if debug_code then puts "[ArduinoClient/request] - checking if message is RestfulMessage" end
 
           return -1 unless message.is_a? RestfulRequest
-          message = message
+          # message = message
   
   
           # ARDUINO_CONNECTION thread
