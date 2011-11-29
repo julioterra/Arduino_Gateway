@@ -21,7 +21,12 @@ module ArduinoGateway
       "ERROR msg: #{custom_msg}; TIME: #{Time.now}"
     end 
     
-    
+    def keys_to_string(new_record)
+      new_record = new_record.inject({}) do |new_hash,(k,v)| 
+        new_hash[k.to_s] = v
+        new_hash
+      end        
+    end
     
   end
 
