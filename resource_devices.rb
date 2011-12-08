@@ -66,6 +66,7 @@ module ArduinoGateway
 
 
       # method adds new DataRecord to appropriate datatable
+      # need to update so that it returns a data Record object with appropriate data
       def initialize (new_record)
         return unless new_record.is_a? Hash
         new_record = keys_to_string(new_record)
@@ -79,7 +80,7 @@ module ArduinoGateway
     
     # ResourceDevice - implementation of resource device data structure description classes
     class ResourceDevice < AbstractRecord
-      data_attributes :ip, :port
+      data_attributes :name, :ip, :port
     end
     
     # ResourceService - implementation of resource device data structure description classes
@@ -135,6 +136,7 @@ module ArduinoGateway
       ::ArduinoGateway::DataRecords::ResourceDevice.new id: 2, ip: "0.0.0.0", port: 6777       
       puts ArduinoGateway::DataRecords::ResourceService.as :text
       puts ArduinoGateway::DataRecords::ResourceDevice.as :text
+      p ::ArduinoGateway::DataRecords::ResourceService.find_by_id(1).each
       ::ArduinoGateway::DataRecords::ResourceService.find_by_id(1).each do |cur|
         puts "Query ResourceService - record id: #{cur.data["id"]}, name: #{cur.data["name"]}"
       end

@@ -5,7 +5,7 @@ module ArduinoGateway
     # ADDRESS_VALID?
     # checks address validity by confirming data type, and presence of ip and port key
     def address_valid?(address)
-        address[:ip].to_s.match(/\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}/) && address[:port].to_s.match(/\d{3,6}/)
+        address[:ip].to_s.match(/\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}/) and address[:port].to_s.match(/\d{3,6}/)
     end  
 
     def error_msg(error_type, exception_msg = "")
