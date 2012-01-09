@@ -5,102 +5,125 @@ require './helpers.rb'
 require './requests.rb'
 require './arduino_client.rb'
 require './public_server.rb'
-require './resource_devices.rb'
+require './model.rb'
+require './model_base.rb'
+require './controller_helpers.rb'
 
 module ArduinoGateway
+  module Controller
 
-  class ArduinoController
-      include ArduinoGateway::Helpers
+    class MainController
+        include ::ArduinoGateway::Helpers
+        include ::ArduinoGateway::Controller::ControllerHelpers
       
-      def initialize(public_server)
+        def initialize(public_server)
           @public_server = public_server
           @public_server.register_controller(self)
           @addresses = []
           error_msgs_init
 
           @debug_code = true
-
-          # @resource_device_list = []    # holds hash with address/id, name and status for each device
-          # @resource_service_list = []   # holds hash with id, and name for each service
-          # @relationships = []           # holds hash with device id, service id, status, type, and range
-      
           # create a thread to listen to keyboard commands
           @key_listener = Thread.new do
-          		puts "[ArduinoController:initializer] starting key listener thread"
-            	while(@public_server.server_running)
-              		input = gets.chomp
-              		puts "[ArduinoController:@key_listener] processing your input [#{input}]"
-              		if input.include?("X") then
-                			puts "[ArduinoController:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
-                			@public_server.stop
-                			exit
-              		end
-            	end
+        		puts "[MainController:initializer] starting key listener thread"
+          	while(@public_server.server_running)
+          		input = gets.chomp
+          		puts "[MainController:@key_listener] processing your input [#{input}]"
+          		if input.include?("X") then
+          			puts "[MainController:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
+          			@public_server.stop
+          			exit
+          		end
+          	end
           end
-          
+        
           # register arduinos specified in the arduino_addrs.json file
           File.open "arduino_addrs.json" do |json_file|
-              JSON.parse(json_file.read).each do |cur_set|
-                  cur_set = {ip: cur_set["ip"], port: cur_set["port"]}
-                  register_arduino(cur_set)
-              end
+            JSON.parse(json_file.read).each do |cur_arduino|
+              new_arduino = {name: cur_arduino["name"], 
+                             ip: cur_arduino["ip"], 
+                             port: cur_arduino["port"]}
+              register_arduino(new_arduino)
+            end
           end
-      end
+        end
 
+        # REGISTER_ARDUINO
+        # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
+        def register_arduino(address)
+          return false unless address_valid?(address)
+          @addresses << address
+          device = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceDevice.new address
+          puts "[MainController:register_arduino] registered new arduino #{address}, now making info request"
 
-      # REGISTER_ARDUINO
-      # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
-      def register_arduino(address)
-        return unless address_valid?(address)
-        @addresses << address
-        register_arduino_resources(address)
-        puts "[ArduinoController:register_arduino] registered new arduino #{address}"
-      end
+          arduino_services = submit_arduino_request RestfulRequest.new(-1, "GET /resource_info", address)
+          parse_arduino_services arduino_services, device.id
+          true
+        end
+      
+        def parse_arduino_services(arduino_services, device_id)
+          # arduino_services.match /^(?:HTTP.*\n[A-Za-z].*\n.*\n){1}((?:.*\n*)*)\n/
+          arduino_services.match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
+          return unless services_json = $1
 
+          JSON.parse(services_json).each do |services|
+            services["resource_name"].match /(^\D*)(?:_\d)*$/
+            return unless service_type_name = $1
+            service_type_id = get_service_type_id(service_type_name)
 
-      def register_arduino_resources(address)
-        RestfulRequest.new(-1, "GET /resource_info", address)
-      end
+            new_service = {name: services["resource_name"], 
+                           post_enabled: services["post_enabled"],
+                           range_min: services["range"]["min"],
+                           range_max: services["range"]["max"],
+                           device_id: device_id, service_type_id: service_type_id}
+            new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.new new_service
 
-
-      # SEND_ARDUINO_REQUEST
-      # request data from one of the registered arduinos; accepts a request obj
-      def make_device_request(new_request)          
-          return error_msg(:arduino_address) unless address_valid?(new_request.address)
-       		ArduinoClient.request(new_request)
-          rescue Exception => error; return error_msg(:timeout, error)
-      end
+            new_relation = {name: service_type_name,
+                            service_id: new_service_record.id,
+                            device_id: device_id,
+                            service_type_id: service_type_id}
+            ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceRelationship.new new_relation
+          end
+        end
+              
+        # SEND_ARDUINO_REQUEST
+        # request data from one of the registered arduinos; accepts a request obj
+        def submit_arduino_request(new_request)          
+            puts "[MainController:submit_arduino_request] request '#{new_request.id}' will be submitted to arduino"
+            return error_msg(:arduino_address) unless address_valid?(new_request.address)
+         		ArduinoClient.request(new_request)
+            rescue Exception => error; return error_msg(:timeout, error)
+        end
     
-    
-      # REGISTER_PUBLIC_REQUEST
-      # receives request from the public server for processing; accepts request (string) and id (int)
-      def process_public_request(new_request, request_id)      
-        	if (new_request.match /GET|POST/)
-            @public_server.respond data_from_devices(request_id, new_request), request_id
-          else 
-            @public_server.respond error_msg(:request_not_supported), request_id
-        	end
-      end
+        # SUBMIT_PUBLIC_REQUEST
+        # receives request from the public server for processing; accepts request (string) and id (int)
+        def submit_public_request(request_string, request_id)      
+          puts "\n\n", request_string, "\n\n"
+          response = ""
+        	if request_string.match /(GET|POST)/
+        	  response = process_public_request(request_string, request_id) 
+          else
+            response = error_msg(:request_not_supported), request_id
+          end
+          puts "[MainController:submit_public_request] response equalled #{response}"
+        	@public_server.respond response, request_id
+        end
 
+        def process_public_request(request_string, request_id)      
+          new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
+          puts "[MainController:process_public_request] processing request: #{new_request.full_request}"
+          response = submit_arduino_request new_request  
+          puts "[MainController:process_public_request] response received from request id '#{request_id}'"
+          response
+        end
 
-      def data_from_devices(request_id, new_request)
-    	  # Parse request
-    	  #   Determine what data needs to be captured from each Arduino
-    	  #   Create a RestfulRequest to send to appropriate Arduino (create an array)
-    	  #   Send requests to each appropriate arduino
-    	  #   Compile response to return via public server
-    	  #   Respond via public server
-        new_request = RestfulRequest.new(request_id, new_request, @addresses[0])  
-        make_device_request(new_request)      
-        # [data_from_arduino(new_request), new_request.id]      
-      end
+        def error_msgs_init
+            @address_error = "<p>Sorry the connection was unsuccessful. There was an issue with the arduino address."
+            @timeout_error = "<p>Sorry the connection timed out. We are having some server issues. " +
+                       "Be back up soon. Thanks for visiting</p> <p>It's #{Time.now}.</p>"
+        end
 
+    end # MainController class
 
-      def error_msgs_init
-          @address_error = "<p>Sorry the connection was unsuccessful. There was an issue with the arduino address."
-          @timeout_error = "<p>Sorry the connection timed out. We are having some server issues. " +
-                     "Be back up soon. Thanks for visiting</p> <p>It's #{Time.now}.</p>"
-      end
-    
-  end
-end
+  end # Controller module
+end # ArduinoGateway module

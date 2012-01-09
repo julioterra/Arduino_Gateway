@@ -5,27 +5,35 @@ module ArduinoGateway
   class RestfulRequest
       include ArduinoGateway::Helpers
 
-      attr_accessor :id, :method_type, :address
-      attr_reader :resources_list, :resources, :options, :body
+      attr_accessor :id, :method_type, :address, :body
+      attr_reader :resources_list, :resources, :options
    
       # initilize method called to create a new message object   
-      def initialize(id="", request="", address={:ip => "0.0.0.0", :port => -1})
+      def initialize(id="-1", request="", _address={:ip => "0.0.0.0", :port => -1})
         @debug_code = true
 
-        self.id = id
-        self.address = address
+        @address = {}
+        @resources_list = []
+        @options = {}
+        @id = id
+        @body = ""
+        @method_type = ""
+        @address[:ip] = _address[:ip] if _address[:ip]
+        @address[:port] = _address[:port] if _address[:port]
 
-        get_request_syntax = /(?:(GET|POST) (\/.*?) (.*$)\n)((?:^\S*: .*$\n)*)/	
+        # get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n((?:^\S*: *.*$\n)*))*/ 
+        # get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n(^(?:\w+=\w*&{0,1})*)\n*)*/ 
+        get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n*(^[\w|\=|\&]*$)\n*)*/ 
         if client_get_request_match = get_request_syntax.match(request)
-          self.method_type = $1 if $1
-          self.resources = $2 if $2
-          self.options = $4 if $4
-        else puts "[RestfulRequests:initialize] ERROR RESCUE: request could not be initialized" 
+            self.method_type = $1 if $1
+            self.resources = $2 if $2
+            self.options = $4 if $4
+            self.body = $5 if $5
+            puts "[RestfulRequests:initialize] all matches: #{p client_get_request_match}"
+            puts "[RestfulRequests:initialize] request initialized #{self.full_request}"
+          else; puts "[RestfulRequests:initialize] ERROR RESCUE: request could not be initialized" 
         end
 
-        puts "[RestfulRequests:initialize] new request initialized:",
-             "method: #{@method_type}, \nresources: #{@resources}", 
-             "options: #{@options}, \naddress: #{@address}"
       end
    
 
@@ -68,11 +76,12 @@ module ArduinoGateway
     end
 
     def restful_request
-     return_string = "#{@method_type.upcase} #{@resources}\r\n\r\n"
+      # return_string = "#{@method_type.upcase} #{@resources}\r\n\r\n"
+      return_string = "#{@method_type.upcase} #{@resources}\r\n"
     end
 
     def full_request
-     return_string = "#{self.full_address} #{self.restful_request} \r\n#{@options} \r\n\r\n#{@body}"
+     return "#{self.restful_request} #{self.http_address}, #{@options}, #{@body}"
     end
 
 
