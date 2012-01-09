@@ -8,7 +8,7 @@ module ArduinoGateway
         address[:ip].to_s.match(/\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}/) and address[:port].to_s.match(/\d{3,6}/)
     end  
 
-    def error_msg(error_type, exception_msg = "")
+    def error_msg(error_type, exception_msg = nil)
       custom_msg = "An issue was encountered when trying to process the current request"
       if error_type == :arduino_address
         custom_msg = "Not able to connect to the arduino because of issue with address or port number."
@@ -17,7 +17,7 @@ module ArduinoGateway
       elsif error_type == :request_not_supported
         custom_msg = "Current request cannot be handled; system only supports GET and POST requests."
       end       
-      custom_msg = " #{custom_msg}; SYSTEM msg: #{exception_msg}" if !exception_msg.empty?
+      custom_msg = " #{custom_msg}; SYSTEM msg: #{exception_msg}" if !exception_msg.nil?
       "ERROR msg: #{custom_msg}; TIME: #{Time.now}"
     end 
     

@@ -10,27 +10,26 @@ require './model_base.rb'
 require './controller_helpers.rb'
 
 module ArduinoGateway
-  module Controller
+  module Control
 
-    class MainController
+    class Controller
         include ::ArduinoGateway::Helpers
-        include ::ArduinoGateway::Controller::ControllerHelpers
-      
+        include ::ArduinoGateway::Control::ControlHelpers
+
         def initialize(public_server)
           @public_server = public_server
           @public_server.register_controller(self)
           @addresses = []
-          error_msgs_init
-
           @debug_code = true
+
           # create a thread to listen to keyboard commands
           @key_listener = Thread.new do
-        		puts "[MainController:initializer] starting key listener thread"
+        		puts "[Controller:initializer] starting key listener thread"
           	while(@public_server.server_running)
           		input = gets.chomp
-          		puts "[MainController:@key_listener] processing your input [#{input}]"
+          		puts "[Controller:@key_listener] processing your input [#{input}]"
           		if input.include?("X") then
-          			puts "[MainController:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
+          			puts "[Controller:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
           			@public_server.stop
           			exit
           		end
@@ -54,14 +53,14 @@ module ArduinoGateway
           return false unless address_valid?(address)
           @addresses << address
           device = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceDevice.new address
-          puts "[MainController:register_arduino] registered new arduino #{address}, now making info request"
+          puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
 
-          arduino_services = submit_arduino_request RestfulRequest.new(-1, "GET /resource_info", address)
-          parse_arduino_services arduino_services, device.id
+          arduino_services = make_request RestfulRequest.new(-1, "GET /resource_info", address)
+          parse_request arduino_services, device.id
           true
         end
       
-        def parse_arduino_services(arduino_services, device_id)
+        def parse_request(arduino_services, device_id)
           # arduino_services.match /^(?:HTTP.*\n[A-Za-z].*\n.*\n){1}((?:.*\n*)*)\n/
           arduino_services.match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
           return unless services_json = $1
@@ -88,42 +87,36 @@ module ArduinoGateway
               
         # SEND_ARDUINO_REQUEST
         # request data from one of the registered arduinos; accepts a request obj
-        def submit_arduino_request(new_request)          
-            puts "[MainController:submit_arduino_request] request '#{new_request.id}' will be submitted to arduino"
+        def make_request(new_request)          
+            puts "[Controller:make_request] request '#{new_request.id}' will be submitted to arduino"
             return error_msg(:arduino_address) unless address_valid?(new_request.address)
-         		ArduinoClient.request(new_request)
+         		Interface::ArduinoClient.register_request(new_request)
             rescue Exception => error; return error_msg(:timeout, error)
         end
     
         # SUBMIT_PUBLIC_REQUEST
         # receives request from the public server for processing; accepts request (string) and id (int)
-        def submit_public_request(request_string, request_id)      
+        def register_request(request_string, request_id)      
           puts "\n\n", request_string, "\n\n"
           response = ""
         	if request_string.match /(GET|POST)/
-        	  response = process_public_request(request_string, request_id) 
+        	  response = process_request(request_string, request_id) 
           else
             response = error_msg(:request_not_supported), request_id
           end
-          puts "[MainController:submit_public_request] response equalled #{response}"
+          puts "[Controller:register_request] response equalled #{response}"
         	@public_server.respond response, request_id
         end
 
-        def process_public_request(request_string, request_id)      
+        def process_request(request_string, request_id)      
           new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
-          puts "[MainController:process_public_request] processing request: #{new_request.full_request}"
-          response = submit_arduino_request new_request  
-          puts "[MainController:process_public_request] response received from request id '#{request_id}'"
+          puts "[Controller:process_request] processing request: #{new_request.full_request}"
+          response = make_request new_request  
+          puts "[Controller:process_request] response received from request id '#{request_id}'"
           response
         end
 
-        def error_msgs_init
-            @address_error = "<p>Sorry the connection was unsuccessful. There was an issue with the arduino address."
-            @timeout_error = "<p>Sorry the connection timed out. We are having some server issues. " +
-                       "Be back up soon. Thanks for visiting</p> <p>It's #{Time.now}.</p>"
-        end
+    end # Controller class
 
-    end # MainController class
-
-  end # Controller module
+  end # Control module
 end # ArduinoGateway module

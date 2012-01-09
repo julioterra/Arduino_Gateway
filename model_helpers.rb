@@ -11,7 +11,8 @@ module ArduinoGateway
           base.send :extend, ClassMethods
         end
       
-        ClassMethods = Module.new do 
+        # ClassMethods = Module.new do 
+        module ClassMethods  
           def database_attributes *attributes
             attributes = [:id, *attributes]
             attributes.each do |attr|

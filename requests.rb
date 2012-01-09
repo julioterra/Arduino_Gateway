@@ -21,8 +21,6 @@ module ArduinoGateway
         @address[:ip] = _address[:ip] if _address[:ip]
         @address[:port] = _address[:port] if _address[:port]
 
-        # get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n((?:^\S*: *.*$\n)*))*/ 
-        # get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n(^(?:\w+=\w*&{0,1})*)\n*)*/ 
         get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n*(^[\w|\=|\&]*$)\n*)*/ 
         if client_get_request_match = get_request_syntax.match(request)
             self.method_type = $1 if $1
@@ -84,7 +82,6 @@ module ArduinoGateway
      return "#{self.restful_request} #{self.http_address}, #{@options}, #{@body}"
     end
 
+  end # RestfulRequest class
 
-  end
-
-end
+end # ArduinoGateway module

@@ -12,7 +12,7 @@ module ArduinoGateway
 
       # ResourceRelationship
       class ResourceService < ::ArduinoGateway::Model::AbstractRecord
-        database_attributes :name, :device_id, :service_type_id, :post_enabled, :range_max, :range_min, 
+        database_attributes :name, :device_id, :service_type_id, :post_enabled, :range_max, :range_min 
       end
 
       # ResourceService - implementation of resource device data structure description classes
