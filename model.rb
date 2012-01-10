@@ -16,6 +16,7 @@ module ArduinoGateway
       end
 
       # ResourceService - implementation of resource device data structure description classes
+      # consider making this a database of ServiceTypes with: 1. name, 2. id
       class ResourceRelationship < ::ArduinoGateway::Model::AbstractRecord
         database_attributes :name, :service_type_id, :device_id, :service_id
       end

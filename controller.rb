@@ -56,11 +56,11 @@ module ArduinoGateway
           puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
 
           arduino_services = make_request RestfulRequest.new(-1, "GET /resource_info", address)
-          parse_request arduino_services, device.id
+          register_services arduino_services, device.id
           true
         end
       
-        def parse_request(arduino_services, device_id)
+        def register_services(arduino_services, device_id)
           # arduino_services.match /^(?:HTTP.*\n[A-Za-z].*\n.*\n){1}((?:.*\n*)*)\n/
           arduino_services.match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
           return unless services_json = $1
@@ -90,30 +90,42 @@ module ArduinoGateway
         def make_request(new_request)          
             puts "[Controller:make_request] request '#{new_request.id}' will be submitted to arduino"
             return error_msg(:arduino_address) unless address_valid?(new_request.address)
-         		Interface::ArduinoClient.register_request(new_request)
+         		return Interface::ArduinoClient.register_request(new_request)
             rescue Exception => error; return error_msg(:timeout, error)
         end
-    
+
         # SUBMIT_PUBLIC_REQUEST
         # receives request from the public server for processing; accepts request (string) and id (int)
         def register_request(request_string, request_id)      
-          puts "\n\n", request_string, "\n\n"
-          response = ""
-        	if request_string.match /(GET|POST)/
-        	  response = process_request(request_string, request_id) 
+          # puts "[Controller:register_request] request string: #{request_string}"
+          if request_string.match /(GET|POST)/
+            process_request request_string, request_id
           else
-            response = error_msg(:request_not_supported), request_id
+            @public_server.respond error_msg(:request_not_supported), request_id
           end
-          puts "[Controller:register_request] response equalled #{response}"
-        	@public_server.respond response, request_id
         end
 
+        # PROCESS_REQUEST - WIP, WIP, WIP, WIP
+        # 1. read public request and determine which arduino requests need to be made
+        # 2. initialize timer to ensure that response to request does not take too long
+        # 3. create an array with the appropriate requests
+        # 4. iterate through the array and make the appropriate requests
+        # 5. add responses to a response array
+        # 6. call process_response method and pass it the response array along with the request_id
         def process_request(request_string, request_id)      
           new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
-          puts "[Controller:process_request] processing request: #{new_request.full_request}"
           response = make_request new_request  
-          puts "[Controller:process_request] response received from request id '#{request_id}'"
-          response
+          # puts "[Controller:process_request] response received from request id '#{request_id}'"
+          # puts "[Controller:process_request] processing request: #{new_request.full_request}"
+          process_response(response, new_request)
+        end
+
+
+        # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
+        # 1. iterate through array in order to create a single response string
+        # 2. respond to public request by calling the 
+        def process_response(responses, request)      
+          @public_server.respond responses, request.id.to_i
         end
 
     end # Controller class
