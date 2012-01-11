@@ -68,20 +68,17 @@ module ArduinoGateway
           JSON.parse(services_json).each do |services|
             services["resource_name"].match /(^\D*)(?:_\d)*$/
             return unless service_type_name = $1
-            service_type_id = get_service_type_id(service_type_name)
-
-            new_service = {name: services["resource_name"], 
+            
+            # CHANGE - check if this is a new service type 
+            service_id = get_service_id(service_type_name)
+            new_instance = {name: services["resource_name"], 
                            post_enabled: services["post_enabled"],
                            range_min: services["range"]["min"],
                            range_max: services["range"]["max"],
-                           device_id: device_id, service_type_id: service_type_id}
-            new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.new new_service
+                           device_id: device_id, service_type_id: service_id}
+            new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.new new_instance
 
-            new_relation = {name: service_type_name,
-                            service_id: new_service_record.id,
-                            device_id: device_id,
-                            service_type_id: service_type_id}
-            ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceRelationship.new new_relation
+            
           end
         end
               
