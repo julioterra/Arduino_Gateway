@@ -69,28 +69,17 @@ module ArduinoGateway
             services["resource_name"].match /(^\D*)(?:_\d)*$/
             return unless service_type_name = $1
             
-            # CHANGE - check if this is a new service type 
+            # get service id by finding existing service id, or adding a new service if needed 
             service_id = get_service_id(service_type_name)
             new_instance = {name: services["resource_name"], 
                            post_enabled: services["post_enabled"],
                            range_min: services["range"]["min"],
                            range_max: services["range"]["max"],
                            device_id: device_id, service_type_id: service_id}
-            new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.new new_instance
-
-            
+            new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.new new_instance            
           end
         end
               
-        # SEND_ARDUINO_REQUEST
-        # request data from one of the registered arduinos; accepts a request obj
-        def make_request(new_request)          
-            puts "[Controller:make_request] request '#{new_request.id}' will be submitted to arduino"
-            return error_msg(:arduino_address) unless address_valid?(new_request.address)
-         		return Interface::ArduinoClient.register_request(new_request)
-            rescue Exception => error; return error_msg(:timeout, error)
-        end
-
         # SUBMIT_PUBLIC_REQUEST
         # receives request from the public server for processing; accepts request (string) and id (int)
         def register_request(request_string, request_id)      
@@ -104,19 +93,37 @@ module ArduinoGateway
 
         # PROCESS_REQUEST - WIP, WIP, WIP, WIP
         # 1. read public request and determine which arduino requests need to be made
-        # 2. initialize timer to ensure that response to request does not take too long
-        # 3. create an array with the appropriate requests
-        # 4. iterate through the array and make the appropriate requests
-        # 5. add responses to a response array
-        # 6. call process_response method and pass it the response array along with the request_id
+        # 2. create an array with the appropriate requests
+        # 3. pass the array to the make_request method
+        # 4. add responses to a response array
+        # 5. call process_response method and pass it the response array along with the request_id
         def process_request(request_string, request_id)      
+
+          ####################################
+          # add code here to process request and create an array with multiple requests if necessary
           new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
+          # add code here to process multiple requests
+          ####################################
+
           response = make_request new_request  
           # puts "[Controller:process_request] response received from request id '#{request_id}'"
           # puts "[Controller:process_request] processing request: #{new_request.full_request}"
           process_response(response, new_request)
         end
 
+
+        # SEND_ARDUINO_REQUEST
+        # request data from one or more registered arduinos
+        # 1. accepts an array of request obj
+        # 2. initialize timer to ensure that response to request does not take too long
+        # 3. iterate through the array and make the appropriate requests
+        # 4. capture responses in a response array that is returned
+        def make_request(new_request)          
+            puts "[Controller:make_request] request '#{new_request.id}' will be submitted to arduino"
+            return error_msg(:arduino_address) unless address_valid?(new_request.address)
+         		return Interface::ArduinoClient.register_request(new_request)
+            rescue Exception => error; return error_msg(:timeout, error)
+        end
 
         # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
         # 1. iterate through array in order to create a single response string
