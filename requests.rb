@@ -31,7 +31,6 @@ module ArduinoGateway
             puts "[RestfulRequests:initialize] request initialized #{self.full_request}"
           else; puts "[RestfulRequests:initialize] ERROR RESCUE: request could not be initialized" 
         end
-
       end
    
 

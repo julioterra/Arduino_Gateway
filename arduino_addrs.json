@@ -3,5 +3,10 @@
 	"name": "kobo", 
 	"ip": "192.168.2.200", 
 	"port": 7999
+	},
+	{
+	"name": "koko", 
+	"ip": "tty.usbserial-A600dP1q", 
+	"port": 0
 	}
 ]
