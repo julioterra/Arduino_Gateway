@@ -14,6 +14,7 @@ module ArduinoGateway
 
         @address = {}
         @resources_list = []
+        @resources = ""
         @options = {}
         @id = id
         @body = ""
@@ -78,7 +79,7 @@ module ArduinoGateway
     end
 
     def full_request
-     return "#{self.restful_request} #{self.http_address}, #{@options}, #{@body}"
+     return "#{self.restful_request} #{self.http_address}, #{@options.to_s}, #{@body.to_s}"
     end
 
   end # RestfulRequest class

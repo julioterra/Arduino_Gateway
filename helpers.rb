@@ -32,6 +32,25 @@ module ArduinoGateway
       end        
     end
     
+    def get_new_timer(timeout)
+      return unless block_given?
+      timer_thread = Thread.new(timeout) do |timeout_time|
+        start_time = Time.now.to_i
+        end_time = start_time + timeout_time
+
+        puts "[get_timer] timer started from #{start_time} to #{end_time}"        
+        loop do
+          current_time = Time.now.to_i
+          if current_time > end_time
+            yield 
+            puts "[get timer] timer completed"
+            self.terminate
+          end
+        end
+      end
+      timer_thread
+    end
+    
   end
 
 end

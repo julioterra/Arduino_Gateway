@@ -6,7 +6,7 @@
 	},
 	{
 	"name": "koko", 
-	"ip": "tty.usbserial-A600dP1q", 
+	"ip": "/dev/tty.usbserial-A6008kUs", 
 	"port": 0
 	}
 ]
