@@ -86,25 +86,6 @@ module ArduinoGateway
 
         end
         
-        # def get_new_timer(timeout)
-        #   return unless block_given?
-        #   timer_thread = Thread.new(timeout) do |timeout_time|
-        #     start_time = Time.now.to_i
-        #     end_time = start_time + timeout_time
-        # 
-        #     puts "[get_new_timer] timer started from #{start_time} to #{end_time}"        
-        #     loop do
-        #       current_time = Time.now.to_i
-        #       if current_time > end_time
-        #         yield 
-        #         puts "[get get_new_timer] timer completed at #{current_time}"
-        #         self.terminate
-        #       end
-        #     end
-        #   end
-        #   timer_thread
-        # end
-
         def ethernet_request(request)
           # ARDUINO_CONNECTION thread
           # thread responsible for connecting to and captuing response from the arduino
@@ -135,7 +116,7 @@ module ArduinoGateway
             end  
             Thread.current[:response] = response
             # Thread.current[:response] = Thread.current[:response] + socket.read
-            send_response(Thread.current[:response].to_s, request)
+            # send_response(Thread.current[:response].to_s, request)
             
             if !timed_out
               Thread.current[:status] = 2    

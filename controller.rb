@@ -137,9 +137,9 @@ module ArduinoGateway
         def register_response(response, request)
           puts "Arduino Gateway register_response controller"
           # process_response(response, request)         
-          # if request.id == -1
-          #   register_services response, device.id            
-          # end 
+          if request.id == -1
+            register_services response, request.address[:device_id]            
+          end 
         end
 
     end # Controller class
