@@ -19,8 +19,7 @@ module ArduinoGateway
         @id = id
         @body = ""
         @method_type = ""
-        @address[:ip] = _address[:ip] if _address[:ip]
-        @address[:port] = _address[:port] if _address[:port]
+        @address = _address if _address[:ip] and _address[:port]
 
         get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n*(^[\w|\=|\&]*$)\n*)*/ 
         if client_get_request_match = get_request_syntax.match(request)

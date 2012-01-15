@@ -19,7 +19,9 @@ module ArduinoGateway
         def initialize(public_server)
           @public_server = public_server
           @public_server.register_controller(self)
+          Interface::ArduinoClient.register_controller(self)
           @addresses = []
+          @devices = {}
           @debug_code = true
 
           # create a thread to listen to keyboard commands
@@ -55,7 +57,7 @@ module ArduinoGateway
           device = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceDevice.new address
           puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
 
-          arduino_services = make_request RestfulRequest.new(-1, "GET /resource_info", address)
+          arduino_services = make_request RestfulRequest.new(-1, "GET /resource_info", address.merge!({device_id: device.id}))
           register_services arduino_services, device.id
           true
         end
@@ -108,7 +110,7 @@ module ArduinoGateway
           response = make_request new_request  
           # puts "[Controller:process_request] response received from request id '#{request_id}'"
           # puts "[Controller:process_request] processing request: #{new_request.full_request}"
-          process_response(response, new_request)
+          # process_response(response, new_request)
         end
 
 
@@ -128,8 +130,16 @@ module ArduinoGateway
         # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
         # 1. iterate through array in order to create a single response string
         # 2. respond to public request by calling the 
-        def process_response(responses, request)      
-          @public_server.respond responses, request.id.to_i
+        def process_response(response, request)      
+          @public_server.respond response, request.id.to_i
+        end
+
+        def register_response(response, request)
+          puts "Arduino Gateway register_response controller"
+          # process_response(response, request)         
+          # if request.id == -1
+          #   register_services response, device.id            
+          # end 
         end
 
     end # Controller class
