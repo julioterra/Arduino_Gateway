@@ -33,27 +33,38 @@ module ArduinoGateway
     end
     
     class Timer
-      class << self
-        def get(timeout)
-          return unless block_given?
-          timer_thread = Thread.new(timeout) do |timeout_time|
-            start_time = Time.now.to_i
-            end_time = start_time + timeout_time
-
-            puts "[get_new_timer] timer started from #{start_time} to #{end_time}"        
-            loop do
-              current_time = Time.now.to_i
-              if current_time > end_time
-                yield 
-                puts "[get get_new_timer] timer completed at #{current_time}"
-                self.terminate
+      
+      def initialize()
+        @timers = []
+        @timer_thread = Thread.new() do
+          puts "[Timer:initialize] Timer thread started at #{Time.now.to_i}"
+          loop do
+            current_time = Time.now.to_i
+            @timers.select! do | timer |
+              # check if any of the timers have timed out, if so call code block
+              if current_time > timer[:end_time]
+                begin
+                  timer[:block].call
+                  puts "[Timer:instance_thread] timer completed at #{Time.now.to_i}"
+                rescue => e
+                  timer[:block] = ""
+                  puts "[Timer:instance_thread] error calling code block associated to end time #{timer[:end_time]}"
+                end
               end
-            end
-          end
-          timer_thread
-        end
-      end
-    end
+              # check if current item should be removed from @timers array 
+              !(current_time > timer[:end_time]) 
+            end # @timers.select! iterator
+          end # loop block          
+        end # @timer thread
+      end # initialize method
+      
+      def new_timer(timeout, &timeout_block)
+        end_time = Time.now.to_i + timeout
+        @timers.push({end_time: end_time, block: timeout_block})
+        puts "[Timer:set_timeout] set_new timer with end time at #{end_time}, #{@timers.size}"
+      end # set_timeout method
+      
+    end # Timer class
     
   end
 

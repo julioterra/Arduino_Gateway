@@ -2,7 +2,6 @@ module ArduinoGateway
   module Control
     module ControlHelpers
       
-      
       def get_service_id(service_type_name)
         if new_service?(service_type_name)
           new_service = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.new name: service_type_name

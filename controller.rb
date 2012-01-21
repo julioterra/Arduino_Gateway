@@ -15,6 +15,7 @@ module ArduinoGateway
     class Controller
         include ::ArduinoGateway::Helpers
         include ::ArduinoGateway::Control::ControlHelpers
+        attr_accessor :timer
 
         def initialize(public_server)
           @public_server = public_server
@@ -23,7 +24,8 @@ module ArduinoGateway
           @addresses = []
           @devices = {}
           @debug_code = true
-
+          @timer = Timer.new
+          
           # create a thread to listen to keyboard commands
           @key_listener = Thread.new do
         		puts "[Controller:initializer] starting key listener thread"
@@ -57,9 +59,7 @@ module ArduinoGateway
           device = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceDevice.new address
           puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
 
-          arduino_services = make_request RestfulRequest.new(-1, "GET /resource_info", address.merge!({device_id: device.id}))
-          register_services arduino_services, device.id
-          true
+          make_request RestfulRequest.new(-1, "GET /resource_info", address.merge!({device_id: device.id}))
         end
       
         def register_services(arduino_services, device_id)
@@ -103,11 +103,11 @@ module ArduinoGateway
 
           ####################################
           # add code here to process request and create an array with multiple requests if necessary
-          new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
+          new_request = RestfulRequest.new(request_id, request_string, @addresses[1])
           # add code here to process multiple requests
           ####################################
 
-          response = make_request new_request  
+          make_request new_request  
           # puts "[Controller:process_request] response received from request id '#{request_id}'"
           # puts "[Controller:process_request] processing request: #{new_request.full_request}"
           # process_response(response, new_request)
@@ -135,10 +135,12 @@ module ArduinoGateway
         end
 
         def register_response(response, request)
-          puts "Arduino Gateway register_response controller"
-          # process_response(response, request)         
+          puts "[Controller:register_response] received a response for request id #{request.id}"
           if request.id == -1
-            register_services response, request.address[:device_id]            
+            puts "[Controller:register_response] response is to a resource_info request #{request.address[:device_id]}"
+            register_services response, request.address[:device_id]          
+          else 
+            process_response(response, request)         
           end 
         end
 

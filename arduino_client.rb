@@ -17,112 +17,94 @@ module ArduinoGateway
         end
         
         def register_request(request, timeout=5)
-          debug_code = true
-          if debug_code then puts "[ArduinoClient/request] - checking if request is RestfulMessage" end
-
-          return -1 unless request.is_a? RestfulRequest
-          if debug_code then puts "[ArduinoClient/request] - starting to time #{Time.now.sec}" end
-
-          arduino_connection = make_request(request)  
-          while(arduino_connection[:status].to_i == 0)
-          end
-          
-          response = arduino_connection[:response]
-          
-          if !arduino_connection.alive? then arduino_connection.terminate end
-          
-          if debug_code 
-            puts "[ArduinoClient/request]: response from arduino socket is #{response}" 
-          end
-          response.to_s
+          return false unless request.is_a? RestfulRequest
+          make_request(request)  
         end
       
         def make_request(request)
           if request.address[:port] == 0
-            arduino_connection = serial_request(request)
+            serial_request(request)
           else
             ethernet_request(request)
           end  
         end
 
         def send_response(response, request)
-          puts "******************"
-          puts "******************"
-          puts "******************"
-          puts "from send_response, here is the response: #{response}"
           @controller.register_response response, request
         end
 
+
         def serial_request(request)
           arduino_connection = Thread.new(request) do |request|
-            Thread.current[:status] = 0
-            Thread.current[:response] = ""
-            serial_list = `ls /dev/tty.*`.split("\n")
-            port_str = serial_list.find{ |n| n.include?("usbserial-A6008kUs") }
-            baud_rate, data_bits, stop_bits, parity = 4800, 8, 1, SerialPort::NONE
-            puts "Selected Serial Device: #{port_str} from full list: #{serial_list}"
+            begin
+              serial_list = `ls /dev/tty.*`.split("\n")
+              port_str = serial_list.find{ |n| n.include?("usbserial-A6008kUs") }
+              baud_rate, data_bits, stop_bits, parity = 4800, 8, 1, SerialPort::NONE
+              response, timed_out, serial_connection = "", false, ""
 
-            serial_connection = SerialPort.new(port_str, baud_rate, data_bits, stop_bits, parity)
-            serial_connection.puts "#{request.restful_request}\r\n\r"
-            puts "making serial request: #{request.restful_request}\r\n\r"
-
-            timed_out = false
-            timer = ArduinoGateway::Helpers::Timer.get(3) do 
-              timed_out = true 
-              serial_connection.puts
-              serial_connection.close
-              # send_response Thread.current[:response], request
-              # puts "after send_response"
-            end
-
-            while !timed_out do
-              if (new_line = serial_connection.gets)
-                 Thread.current[:response] = Thread.current[:response] + new_line
+              begin
+                serial_connection = SerialPort.new(port_str, baud_rate, data_bits, stop_bits, parity)
+              rescue => e
+                raise StandardError, "[ArduinoClient:serial_request] serial port not currently available"
               end
-            end  
-            Thread.current[:status] = 2    
-            if timer.alive? then timer.terminate end
-          end
+              serial_connection.puts "#{request.restful_request}\r\n\r\n"
 
-        end
+              puts "Selected Serial Device: #{port_str} from full list: #{serial_list}"
+              puts "Making Serial Request: #{request.restful_request}\r\n\r"
+
+              timer = @controller.timer.new_timer(4) do 
+                timed_out = true 
+                serial_connection.puts
+                serial_connection.close
+              end
+
+              while !timed_out do
+                if new_line = serial_connection.gets
+                  response = response + new_line 
+                end
+              end  
+
+            rescue => e
+              puts "#{e.message}"
+            ensure 
+              send_response(response, request)
+              serial_connection.close
+            end
+          end # arduino_connection thread
+          arduino_connection
+        end # serial_request method
         
+
         def ethernet_request(request)
           # ARDUINO_CONNECTION thread
           # thread responsible for connecting to and captuing response from the arduino
           arduino_connection = Thread.new(request) do |request_data| 
-            # use the thread keys to store information about the connection status and the server's response
-            Thread.current[:status] = 0
-            Thread.current[:response] = ""
 
-            addr = Socket.getaddrinfo(request_data.address[:ip], nil)  
-            socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
+            begin
+              response, timed_out = "", false
+              addr = Socket.getaddrinfo(request_data.address[:ip], nil)  
+              socket = Socket.new(Socket.const_get(addr[0][0]), Socket::SOCK_STREAM, 0)
 
-            timed_out = false
-            timer = ArduinoGateway::Helpers::Timer.get(3) do 
-              time_out = true
-              Thread.current[:status] = -1    
-              socket.close
-              puts "Closed Socket"
-              send_response Thread.current[:response], request
-              puts "response sent"
-            end
+              timer = @controller.timer.new_timer(3) do 
+                # puts "set timeout to true for ethernet"
+                timed_out = true
+                socket.close             
+              end
             
-            connection_status = socket.connect(Socket.pack_sockaddr_in(request_data.address[:port], addr[0][3]))
-            socket.write( request_data.restful_request )
-
-            response = ""
-            while !timed_out and new_line = socket.gets do
+              connection_status = socket.connect(Socket.pack_sockaddr_in(request_data.address[:port], addr[0][3]))
+              socket.write( request_data.restful_request )
+              while !timed_out and new_line = socket.gets do
                response = response + new_line
-            end  
-            Thread.current[:response] = response
-            # Thread.current[:response] = Thread.current[:response] + socket.read
-            # send_response(Thread.current[:response].to_s, request)
-            
-            if !timed_out
-              Thread.current[:status] = 2    
-              if timer.alive? then timer.terminate end
+              end  
+              
+            rescue => e
+              puts "[ArduinoClient:ethernet_request] error backtrace #{e}"
+            ensure
+              send_response(response, request)
+              socket.close
             end
           end # arduino_connection thread
+          arduino_connection
         end # ethernet_request method
 
       end # class << self
