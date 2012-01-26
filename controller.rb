@@ -22,21 +22,28 @@ module ArduinoGateway
           @public_server.register_controller(self)
           Interface::ArduinoClient.register_controller(self)
           @addresses = []
-          @devices = {}
           @debug_code = true
           @timer = Timer.new
+
+          # not yet implemented
+          @active_requests = []
+          # not yet implemented
           
           # create a thread to listen to keyboard commands
           @key_listener = Thread.new do
-        		puts "[Controller:initializer] starting key listener thread"
-          	while(@public_server.server_running)
-          		input = gets.chomp
-          		puts "[Controller:@key_listener] processing your input [#{input}]"
-          		if input.include?("X") then
-          			puts "[Controller:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
-          			@public_server.stop
-          			exit
-          		end
+            begin
+          		puts "[Controller:initializer] starting key listener thread"
+              while(true)       
+            		input = STDIN.gets.chomp
+            		puts "[Controller:@key_listener] processing your input [#{input}]"
+            		if input.include?("X") then
+            			puts "[Controller:@key_listener] closing port #{@public_server.public_port_number} and exiting app."
+            			@public_server.stop
+            			exit
+            		end
+            	end
+          	rescue => e
+          	  puts "[Controller:@key_listener] thread stopped #{e.backtrace}"
           	end
           end
         
@@ -103,7 +110,7 @@ module ArduinoGateway
 
           ####################################
           # add code here to process request and create an array with multiple requests if necessary
-          new_request = RestfulRequest.new(request_id, request_string, @addresses[1])
+          new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
           # add code here to process multiple requests
           ####################################
 

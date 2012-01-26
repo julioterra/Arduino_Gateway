@@ -82,8 +82,8 @@ module ArduinoGateway
 
         # method that kills client connections from @connections hash list and turns 
         # off  server if no connection id is provided.
-        def stop(id = -1)
-          if id == -1 
+        def stop(id = -11)
+          if id == -11 
             @server.close 
             @server_running = false
     			else
@@ -91,6 +91,7 @@ module ArduinoGateway
             @connections[id].kill   
             @connections.delete(id)   
   			  end
+			    puts "[PublicServer:stop] @connections array size #{@connections.size}"
         end
        
     end

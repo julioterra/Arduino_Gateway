@@ -11,7 +11,11 @@ include ArduinoGateway::Model
 
 # arduino_host_ip = '192.168.2.200'
 # arduino_port_number = 7999
-public_port_number = 7996
+public_port_number = 8008
+
+if ARGV[0] 
+  public_port_number = ARGV[0] 
+end
 
 arduino_server = ArduinoGateway::Interface::PublicServer.new(public_port_number)
 arduino_controller = ArduinoGateway::Control::Controller.new(arduino_server)
