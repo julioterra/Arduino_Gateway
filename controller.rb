@@ -26,7 +26,7 @@ module ArduinoGateway
           @timer = Timer.new
 
           # not yet implemented
-          @active_requests = []
+          @active_requests = {}
           # not yet implemented
           
           # create a thread to listen to keyboard commands
@@ -94,7 +94,14 @@ module ArduinoGateway
         def register_request(request_string, request_id)      
           # puts "[Controller:register_request] request string: #{request_string}"
           if request_string.match /(GET|POST)/
+
+            @active_requests[request_id] = {public_request: request_string}
+            puts "@active_requests updated to #{@active_requests}"
+
             process_request request_string, request_id
+            @timer.new_timer(1) do
+              send_response request_id
+            end
           else
             @public_server.respond error_msg(:request_not_supported), request_id
           end
@@ -114,6 +121,9 @@ module ArduinoGateway
           # add code here to process multiple requests
           ####################################
 
+          @active_requests[request_id].merge!({private_requests: [new_request]})            
+          puts "@active_requests updated to #{@active_requests}"
+
           make_request new_request  
           # puts "[Controller:process_request] response received from request id '#{request_id}'"
           # puts "[Controller:process_request] processing request: #{new_request.full_request}"
@@ -125,6 +135,7 @@ module ArduinoGateway
         # request data from one or more registered arduinos
         # 1. accepts an array of request obj
         # 2. initialize timer to ensure that response to request does not take too long
+        #    a. in the timer block call the send_response method with request.id  
         # 3. iterate through the array and make the appropriate requests
         # 4. capture responses in a response array that is returned
         def make_request(new_request)          
@@ -134,21 +145,34 @@ module ArduinoGateway
             rescue Exception => error; return error_msg(:timeout, error)
         end
 
-        # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
-        # 1. iterate through array in order to create a single response string
-        # 2. respond to public request by calling the 
-        def process_response(response, request)      
-          @public_server.respond response, request.id.to_i
-        end
-
         def register_response(response, request)
           puts "[Controller:register_response] received a response for request id #{request.id}"
           if request.id == -1
             puts "[Controller:register_response] response is to a resource_info request #{request.address[:device_id]}"
             register_services response, request.address[:device_id]          
           else 
-            process_response(response, request)         
+            process_response(response, request)
           end 
+        end
+
+        # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
+        # 1. iterate through array in order to create a single response string
+        # 2. respond to public request by calling the 
+        def process_response(response, request)      
+          @public_server.respond response, request.id
+        end
+
+        def send_response(request)
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          puts "GET HERE"
+          # @active_requests.delete request          
         end
 
     end # Controller class

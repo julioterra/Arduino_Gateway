@@ -9,9 +9,7 @@ require './controller.rb'
 include Socket::Constants
 include ArduinoGateway::Model
 
-# arduino_host_ip = '192.168.2.200'
-# arduino_port_number = 7999
-public_port_number = 8008
+public_port_number = 7996
 
 if ARGV[0] 
   public_port_number = ARGV[0] 
