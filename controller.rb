@@ -56,8 +56,9 @@ module ArduinoGateway
               register_arduino(new_arduino)
             end
           end
-        end
+        end # initialize method
 
+        ######################################
         # REGISTER_ARDUINO
         # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
         def register_arduino(address)
@@ -67,8 +68,12 @@ module ArduinoGateway
           puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
 
           make_request RestfulRequest.new(-1, "GET /resource_info", address.merge!({device_id: device.id}))
-        end
+        end # register_arduino method
+        
       
+        ######################################
+        # REGISTER_SERVICES
+        # Method called to parse info_requests made to each device when registered      
         def register_services(arduino_services, device_id)
           # arduino_services.match /^(?:HTTP.*\n[A-Za-z].*\n.*\n){1}((?:.*\n*)*)\n/
           arduino_services.match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
@@ -87,57 +92,60 @@ module ArduinoGateway
                            device_id: device_id, service_type_id: service_id}
             new_service_record = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.new new_instance            
           end
-        end
+        end # register_services method
               
-        # SUBMIT_PUBLIC_REQUEST
-        # receives request from the public server for processing; accepts request (string) and id (int)
+
+        ######################################              
+        # REGISTER_REQUEST // CALLBACK API METHOD
+        # Method called by public server to register new request
+        # Accepts: request_string (string), request_id (int)
         def register_request(request_string, request_id)      
+
           # puts "[Controller:register_request] request string: #{request_string}"
           if request_string.match /(GET|POST)/
-
-            @active_requests[request_id] = {public_request: request_string}
-            puts "@active_requests updated to #{@active_requests}"
-
+            @active_requests[request_id] = {public_request: request_string, 
+                                            received_on: Time.now.to_i,
+                                            arduino_requests: [],
+                                            arduino_responses: [],
+                                            public_response: ""}
+            puts "[Controller:register_request] new request, id: #{request_id}, content: #{@active_requests}"
             process_request request_string, request_id
+
             @timer.new_timer(1) do
-              send_response request_id
+              unless @active_requests[request_id].nil?
+                process_response @active_requests[request_id][:arduino_responses], request_id 
+              end
             end
+
           else
             @public_server.respond error_msg(:request_not_supported), request_id
           end
-        end
+        end # register_request method
+        
 
-        # PROCESS_REQUEST - WIP, WIP, WIP, WIP
+        ######################################
+        # PROCESS_REQUEST 
         # 1. read public request and determine which arduino requests need to be made
         # 2. create an array with the appropriate requests
         # 3. pass the array to the make_request method
-        # 4. add responses to a response array
-        # 5. call process_response method and pass it the response array along with the request_id
         def process_request(request_string, request_id)      
 
           ####################################
-          # add code here to process request and create an array with multiple requests if necessary
+          # add code here to create an array with multiple requests when necessary
           new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
-          # add code here to process multiple requests
+          new_requests = [new_request]
+          @active_requests[request_id][:arduino_requests] = new_requests           
+          # add code here to create an array with multiple requests when necessary
           ####################################
-
-          @active_requests[request_id].merge!({private_requests: [new_request]})            
-          puts "@active_requests updated to #{@active_requests}"
-
-          make_request new_request  
-          # puts "[Controller:process_request] response received from request id '#{request_id}'"
-          # puts "[Controller:process_request] processing request: #{new_request.full_request}"
-          # process_response(response, new_request)
+          
+          @active_requests[request_id][:arduino_requests].each do | request |
+            make_request request  
+          end
         end
 
-
-        # SEND_ARDUINO_REQUEST
-        # request data from one or more registered arduinos
-        # 1. accepts an array of request obj
-        # 2. initialize timer to ensure that response to request does not take too long
-        #    a. in the timer block call the send_response method with request.id  
-        # 3. iterate through the array and make the appropriate requests
-        # 4. capture responses in a response array that is returned
+        ######################################
+        # MAKE_REQUEST
+        # method that sends individual requests to specific devices
         def make_request(new_request)          
             puts "[Controller:make_request] request '#{new_request.id}' will be submitted to arduino"
             return error_msg(:arduino_address) unless address_valid?(new_request.address)
@@ -145,35 +153,44 @@ module ArduinoGateway
             rescue Exception => error; return error_msg(:timeout, error)
         end
 
+        ######################################
+        # REGISTER_RESPONSE // CALLBACK API METHOD
+        # Method called by the ArduinoClient class to register responses to request
         def register_response(response, request)
-          puts "[Controller:register_response] received a response for request id #{request.id}"
-          if request.id == -1
-            puts "[Controller:register_response] response is to a resource_info request #{request.address[:device_id]}"
-            register_services response, request.address[:device_id]          
+
+          # if reponse is to an info_request then register services
+          if request.id == -1 then register_services response, request.address[:device_id]          
+
+          # else handle response like a normal resource request
           else 
-            process_response(response, request)
-          end 
-        end
+            @active_requests[request.id][:arduino_responses] << response                       
+            requests = @active_requests[request.id][:arduino_requests].length
+            responses = @active_requests[request.id][:arduino_responses].length
+            if responses >= requests
+              process_response(@active_requests[request.id][:arduino_responses], request.id) 
+              @active_requests.delete(request.id)              
+            end
+          end
+        end # register_response method
 
-        # PROCESS_RESPONSE - WIP, WIP, WIP, WIP
-        # 1. iterate through array in order to create a single response string
+
+        ######################################
+        # PROCESS_RESPONSE 
+        # Method called when all responses have been received or when request times out
+        # 1. iterate through response in order to create a single response string
         # 2. respond to public request by calling the 
-        def process_response(response, request)      
-          @public_server.respond response, request.id
-        end
+        def process_response(responses, request_id)      
+          unless @active_requests[request_id][:arduino_responses].empty?
+            @public_server.respond @active_requests[request_id][:arduino_responses][0], request_id
+          else
 
-        def send_response(request)
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          puts "GET HERE"
-          # @active_requests.delete request          
-        end
+            ######################################
+            # need to send an error message as public response if no arduino responses were registered
+            @public_server.respond "", request_id
+            ######################################
+
+          end
+        end # process_response method
 
     end # Controller class
 
