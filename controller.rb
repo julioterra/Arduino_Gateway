@@ -155,42 +155,56 @@ module ArduinoGateway
             device_match = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceDevice.find_by_name(parsed_request[0])
             puts "[Controller:process_request] checking if request starts with device name: #{parsed_request[0]}"
 
-            # handle requests for specific devices
+            # handle requests for services from specific device
             if !device_match.empty?
               # puts "[Controller:process_request] device specific request confirmed: #{device_match}"
               parsed_request.shift 
               device_info = {id: device_match[0].id, ip: device_match[0].ip, port: device_match[0].port}
-              service_match = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.find_by_device_id(device_info[:id])              
-              if !service_match.empty?
-                # puts "[Controller:process_request] services found: #{service_match}"
+
+              # handle service instance requests
+              service_instance_match = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceInstance.find_by_device_id(device_info[:id])              
+              if !service_instance_match.empty?
+                # puts "[Controller:process_request] services found: #{service_instance_match}"
                 parsed_request.each do | service_request |
-                  service_match.each do | service_instance |
+                  service_instance_match.each do | service_instance |
                     # puts "[Controller:process_request] mached service: #{service_instance.name} : #{service_request}"
                     device_resources << service_request if service_instance.name.to_s.eql? service_request
                   end
                 end
-                # puts "[Controller:process_request] services requested: #{device_resources}"              
-                new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-                new_requests << RestfulRequest.new(request_id, new_request_string, device_info)              
               end
 
+              # handle generic service requests
+              parsed_request.each do | service_request |
+                generic_service_match = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.find_by_name(service_request)              
+                if !generic_service_match.empty?
+                  puts "[Controller:process_request] generic services found: #{generic_service_match}"
+                  service_id = generic_service_match[0].id.to_i
+                  service_instance_match.each do | service_instance |
+                    puts "[Controller:process_request] mached service: #{service_instance.service_type_id} : #{service_id}"
+                    device_resources << service_instance.name if service_instance.service_type_id == service_id
+                  end
+                end
+              end
+
+              puts "[Controller:process_request] services requested: #{device_resources}"              
+              new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
+              new_requests << RestfulRequest.new(request_id, new_request_string, device_info)              
+              
             # handle requests for services across devices
             else 
-
-              
+              # identify all services being requested that are available
+              # determine on which devices these services are available
+              # create requests for these specific devices
             end
-                        
-            puts "Parsed_Request = #{parsed_request}"
-            # new_request = RestfulRequest.new(request_id, request_string, @addresses[0])
-            # new_requests = [new_request]
-            # make a request to appropriate devices for appropriate services
-          end
+          end # else related to requests for specific devices and services
 
           @active_requests[request_id][:arduino_requests] = new_requests                     
           @active_requests[request_id][:arduino_requests].each do | request |
             make_request request  
           end
         end
+
+
 
         ######################################
         # MAKE_REQUEST
