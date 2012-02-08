@@ -41,7 +41,7 @@ module ArduinoGateway
             @datatables ||= {}
           end
           def build_datatables
-            ::ArduinoGateway::Model::ActiveRecordTemplates.constants.each do |record_template|
+            ::ArduinoGateway::Model::ModelTemplates.constants.each do |record_template|
               unless record_template.equal? :AbstractRecord
                 self.build_datatable(record_template)
               end

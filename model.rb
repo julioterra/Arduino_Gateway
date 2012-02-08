@@ -3,7 +3,7 @@ require './model_base'
 module ArduinoGateway
   module Model
     
-    module ActiveRecordTemplates
+    module ModelTemplates
 
       # ResourceDevice - implementation of resource device data structure description classes
       class ResourceDevice < ::ArduinoGateway::Model::AbstractRecord

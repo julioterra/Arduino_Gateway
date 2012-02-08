@@ -4,7 +4,7 @@ module ArduinoGateway
       
       def get_service_id(service_type_name)
         if new_service?(service_type_name)
-          new_service = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.new name: service_type_name
+          new_service = ::ArduinoGateway::Model::ModelTemplates::ResourceService.new name: service_type_name
           new_service.id = check_service_id(service_type_name)
         else
           check_service_id(service_type_name)
@@ -12,13 +12,13 @@ module ArduinoGateway
       end
       
       def check_service_id(service_type_name)
-        temp_records = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.find_by_name(service_type_name)
+        temp_records = ::ArduinoGateway::Model::ModelTemplates::ResourceService.find_by_name(service_type_name)
         if temp_records.length > 0; return temp_records[0].id.to_i
         else; return get_new_service_id; end        
       end
 
       def get_new_service_id
-        sorted_database = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.sort_rows_by "id" 
+        sorted_database = ::ArduinoGateway::Model::ModelTemplates::ResourceService.sort_rows_by "id" 
         service_id_cat_number_temp = 0
         if sorted_database.length > 0
           sorted_database.each do |record|
@@ -31,7 +31,7 @@ module ArduinoGateway
       end
       
       def new_service?(service_type_name)
-        sorted_database = ::ArduinoGateway::Model::ActiveRecordTemplates::ResourceService.sort_rows_by "name" 
+        sorted_database = ::ArduinoGateway::Model::ModelTemplates::ResourceService.sort_rows_by "name" 
         if sorted_database.length > 0
           sorted_database.each do |record|
             record = record.as :text
