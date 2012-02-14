@@ -5,6 +5,11 @@
 	"port": 7999
 	},
 	{
+	"name": "lobo", 
+	"ip": "10.0.1.20", 
+	"port": 7999
+	},
+	{
 	"name": "koko", 
 	"ip": "/dev/tty.usbserial-A6008kUs", 
 	"port": 0

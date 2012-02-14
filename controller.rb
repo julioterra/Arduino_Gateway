@@ -21,7 +21,6 @@ module ArduinoGateway
           @public_server = public_server
           @public_server.register_controller(self)
           Interface::ArduinoClient.register_controller(self)
-          @addresses = []
           @arduinos = {}
           @debug_code = true
           @timer = Timer.new
@@ -51,14 +50,11 @@ module ArduinoGateway
           # register arduinos specified in the arduino_addrs.json file
           File.open "arduino_addrs.json" do |json_file|
             JSON.parse(json_file.read).each do |cur_arduino|
-              # new_arduino = {name: cur_arduino["name"], 
-              #                ip: cur_arduino["ip"], 
-              #                port: cur_arduino["port"]}
-              # register_arduino(new_arduino)
               @arduinos[cur_arduino["name"].to_sym] = {name: cur_arduino["name"],
                                                        ip: cur_arduino["ip"], 
-                                                       port: cur_arduino["port"]}
-              register_arduino(@arduinos[cur_arduino["name"].to_sym])
+                                                       port: cur_arduino["port"],
+                                                       registered: false}
+              register_arduino(cur_arduino["name"].to_sym)
             end
           end
         end # initialize method
@@ -66,13 +62,11 @@ module ArduinoGateway
         ######################################
         # REGISTER_ARDUINO
         # register new arduino addresses; accepts hash keys with key/value pairs for ip and port
-        def register_arduino(address)
-          return false unless address_valid?(address)
-          @addresses << address
-          device = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.new address
-          puts "[Controller:register_arduino] registered new arduino #{address}, now making info request"
-
-          make_request RestfulRequest.new(-1, "GET /resource_info", address.merge!({device_id: device.id}))
+        def register_arduino(name)
+          return false unless name.is_a? Symbol and address_valid?(@arduinos[name])
+          device = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.new @arduinos[name]
+          @arduinos[name][:device_id] = device.id        
+          make_request RestfulRequest.new(-1, "GET /resource_info", @arduinos[name])
         end # register_arduino method
         
       
@@ -87,6 +81,7 @@ module ArduinoGateway
           JSON.parse(services_json).each do |services|
             services["resource_name"].match /(^\D*)(?:_\d)*$/
             return unless service_type_name = $1
+            # puts "[Controller:register_services] current resource name matched '#{$1}'"
             
             # get service id by finding existing service id, or adding a new service if needed 
             service_id = get_service_id(service_type_name)
@@ -106,7 +101,7 @@ module ArduinoGateway
         # Accepts: request_string (string), request_id (int)
         def register_request(request_string, request_id)      
 
-          # puts "[Controller:register_request] request string: #{request_string}"
+          puts "[Controller:register_request] request string: #{request_string}"
           if request_string.match /(GET|POST)/
             @active_requests[request_id] = {public_request: request_string, 
                                             received_on: Time.now.to_i,
@@ -265,7 +260,8 @@ module ArduinoGateway
         def register_response(response, request)
 
           # if reponse is to an info_request then register services
-          if request.id == -1 then register_services response, request.address[:device_id]          
+          if request.id == -1 
+            register_services response, request.address[:device_id]          
 
           # else handle response like a normal resource request
           else 

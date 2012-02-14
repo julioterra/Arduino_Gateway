@@ -34,9 +34,10 @@ module ArduinoGateway
         sorted_database = ::ArduinoGateway::Model::ModelTemplates::ResourceService.sort_rows_by "name" 
         if sorted_database.length > 0
           sorted_database.each do |record|
-            record = record.as :text
-            if record.downcase.include? service_type_name
-              # puts "match found - #{record.as :text}"
+            record = record.name.to_s
+            # puts "[Controller_helper:new_service?] matching service name '#{service_type_name}' to existing record '#{record}'"
+            if record.to_s.downcase.eql? service_type_name.to_s.downcase
+              # puts "[Controller_helper:new_service?] match found - #{record}"
               return false
             end
           end
