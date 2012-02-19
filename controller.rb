@@ -327,9 +327,12 @@ module ArduinoGateway
             @public_server.respond @active_requests[request_id][:public_response], request_id
 
           else
+
+            http_header = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n"
+            public_response = "#{http_header}Resources Not Found"
             ######################################
             # need to send an error message as public response if no arduino responses were registered
-            @public_server.respond "", request_id
+            @public_server.respond public_response, request_id
             ######################################
 
           end
