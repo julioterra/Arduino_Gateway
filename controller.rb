@@ -105,8 +105,8 @@ module ArduinoGateway
           if request_string.match /(GET|POST)/
             @active_requests[request_id] = {public_request: request_string, 
                                             received_on: Time.now.to_i,
-                                            arduino_requests: [],
-                                            arduino_responses: [],
+                                            arduino_requests: {},
+                                            arduino_responses: {},
                                             public_response: ""}
             puts "[Controller:register_request] new request, id: #{request_id}, content: #{@active_requests[request_id]}"
             process_request request_string, request_id
@@ -130,7 +130,7 @@ module ArduinoGateway
         # 3. pass the array to the make_request method
         def process_request(request_string, request_id)      
 
-          new_requests = []
+          new_requests = {}
           
           # parse the URL into verb, resources, options, and body
           request_string.match /(GET|POST) \/(\S*)(.*)^(.*)\Z/m
@@ -143,8 +143,8 @@ module ArduinoGateway
               active_arduino = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_by_ip(address[:ip])
               if !active_arduino.empty?
                 new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-                new_requests << RestfulRequest.new(request_id, new_request_string, address)              
-                # new_requests[key] = RestfulRequest.new(request_id, new_request_string, address)              
+                # new_requests << RestfulRequest.new(request_id, new_request_string, address)              
+                new_requests[key.to_s] = RestfulRequest.new(request_id, new_request_string, address)              
               end
             end
 
@@ -159,7 +159,10 @@ module ArduinoGateway
             if !device_match.empty?
               # puts "[Controller:process_request] device specific request confirmed: #{device_match}"
               parsed_request.shift 
-              device_info = {name: device_match[0].name, id: device_match[0].id, ip: device_match[0].ip, port: device_match[0].port}
+              device_info = {name: device_match[0].name.to_s, 
+                             id: device_match[0].id, 
+                             ip: device_match[0].ip, 
+                             port: device_match[0].port}
 
               # handle service instance requests
               service_instance_match = ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_device_id(device_info[:id])              
@@ -188,7 +191,7 @@ module ArduinoGateway
 
               puts "[Controller:process_request] services requested: #{device_resources}"              
               new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-              new_requests << RestfulRequest.new(request_id, new_request_string, device_info)              
+              new_requests[device_info[:name]] = RestfulRequest.new(request_id, new_request_string, device_info)              
               # new_requests << RestfulRequest.new(request_id, new_request_string, device_info)              
               
             # handle requests for services across devices
@@ -234,17 +237,22 @@ module ArduinoGateway
                 puts "[Controller:process_request] services: #{device_resources} on #{device}"
                 device_match = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_by_id(device.to_i)
                 unless device_match.empty?
-                  device_info = {id: device_match[0].id, ip: device_match[0].ip, port: device_match[0].port}
+                  device_info = {name: device_match[0].name.to_s, 
+                                 id: device_match[0].id, 
+                                 ip: device_match[0].ip, 
+                                 port: device_match[0].port}
                   puts "[Controller:process_request] services requested from device /#{device_resources.join("/")}: #{device_resources}"              
                   new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-                  new_requests << RestfulRequest.new(request_id, new_request_string, device_info)       
+                  new_requests[device_info[:name]] = RestfulRequest.new(request_id, new_request_string, device_info)              
+                  # new_requests << RestfulRequest.new(request_id, new_request_string, device_info)       
                 end # unless device_match.empty?  
               end # services_by_device.each
 
             end # parsed_request.each
           end # else related to requests for specific devices and services
 
-          @active_requests[request_id][:arduino_requests] = new_requests.map  { | request | make_request request }             
+          new_requests.each  { | name, request | make_request request }
+          @active_requests[request_id][:arduino_requests] = new_requests
         end # process_request
 
 
@@ -270,7 +278,9 @@ module ArduinoGateway
 
           # else handle response like a normal resource request
           else 
-            @active_requests[request.id][:arduino_responses] << response                       
+            @active_requests[request.id][:arduino_responses][request.address[:name]] = response                       
+
+            # @active_requests[request.id][:arduino_responses] << response                       
             requests = @active_requests[request.id][:arduino_requests].length
             responses = @active_requests[request.id][:arduino_responses].length
             puts "[Controller:register_response] number of requests #{requests}, and responses #{responses}"
@@ -291,17 +301,27 @@ module ArduinoGateway
         def process_response(responses, request_id)      
           unless @active_requests[request_id][:arduino_responses].empty?            
             ######################################
-            public_response = ""
-            responses_total = @active_requests[request_id][:arduino_responses].length
-            # @active_requests[request_id][:arduino_responses].each_with_index do |response, index|
-            #   response.match /.*?([\[\{].*[\}\]]+)/
-            #   if index == 0; public_response = "[\r\n#{$1},"  
-            #   elsif; index == (responses_total - 1) public_response = "#{public_response}\r\n, #{$1}\r\n]"
-            #   else; public_response = "#{public_response}\r\n, #{$1}"
-            #   end
-            # end
-            @public_server.respond @active_requests[request_id][:arduino_responses][0], request_id
-          else
+            public_responses = []
+            @active_requests[request_id][:arduino_responses].each do | device, response |
+              response.match /.*?([\[\{].*[\}\]]+)/m
+              public_responses << "{\r\n#{device}:#{$1}\r\n}"
+            end
+
+
+            public_response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
+            public_response += "[\r\n"
+            public_responses.each_with_index do | response, index |
+              public_response += response
+              if index == public_responses.length - 1 
+                public_response += "\r\n]" 
+              else 
+                public_response += ",\r\n" 
+              end 
+            end
+
+            puts "[Controller:process_response] public response #{public_response}"
+            @active_requests[request_id][:public_response] = public_response
+            @public_server.respond @active_requests[request_id][:public_response], request_id
 
             ######################################
             # need to send an error message as public response if no arduino responses were registered
