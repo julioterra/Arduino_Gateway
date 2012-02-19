@@ -302,14 +302,16 @@ module ArduinoGateway
           unless @active_requests[request_id][:arduino_responses].empty?            
             ######################################
             public_responses = []
+            http_header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
+            public_response = "#{http_header}[\r\n"
+
+            # create a hash key with device/response pairs
             @active_requests[request_id][:arduino_responses].each do | device, response |
               response.match /.*?([\[\{].*[\}\]]+)/m
               public_responses << "{\r\n#{device}:#{$1}\r\n}"
             end
 
-
-            public_response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
-            public_response += "[\r\n"
+            # convert device/response pairs from hash into a json formatted string
             public_responses.each_with_index do | response, index |
               public_response += response
               if index == public_responses.length - 1 
@@ -319,10 +321,12 @@ module ArduinoGateway
               end 
             end
 
+            # respond back to public request with data in json format
             puts "[Controller:process_response] public response #{public_response}"
             @active_requests[request_id][:public_response] = public_response
             @public_server.respond @active_requests[request_id][:public_response], request_id
 
+          else
             ######################################
             # need to send an error message as public response if no arduino responses were registered
             @public_server.respond "", request_id
