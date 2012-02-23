@@ -61,16 +61,24 @@ module ArduinoGateway
         def register_arduino(arduino)
           return false unless address_valid?(arduino)
           device = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.new arduino
-          arduino[:device_id] = device.id        
-          make_request RestfulRequest.new(-1, "GET /resource_info", arduino)
+          arduino[:device_id] = device.id
+          request_id, request_string = device.id * -1, "GET /resource_info"
+          request = RestfulRequest.new(request_id, request_string, arduino)
+
+          @active_requests[request_id] = {public_request: request_string, 
+                                          received_on: Time.now.to_i,
+                                          arduino_requests: {arduino[:name] => request},
+                                          arduino_responses: {},
+                                          public_response: ""}
+
+          make_request request
         end # register_arduino method
       
         ######################################
         # REGISTER_SERVICES
         # Method called to parse info_requests made to each device when registered      
-        def register_services(arduino_services, device_id)
-          # arduino_services.match /^(?:HTTP.*\n[A-Za-z].*\n.*\n){1}((?:.*\n*)*)\n/
-          arduino_services.match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
+        def register_services(request)
+          @active_requests[request.id][:arduino_responses][request.address[:name]].match /^(?:[A-Za-z].*\n)*([\[|\{](?:.*\n*)*)\n/
           return unless services_json = $1
 
           JSON.parse(services_json).each do |services|
@@ -84,7 +92,7 @@ module ArduinoGateway
                            post_enabled: services["post_enabled"],
                            range_min: services["range"]["min"],
                            range_max: services["range"]["max"],
-                           device_id: device_id, service_type_id: service_id}
+                           device_id: request.address[:device_id], service_type_id: service_id}
             new_service_record = ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.new new_instance            
           end
         end # register_services method
@@ -160,9 +168,28 @@ module ArduinoGateway
 
           #######################################################
           # RETURN WEBFORM TO TEST OUT ALL OF THE POST-ABLE RESOURCES
-          elsif request_resources.match /post_test/
-            
+          elsif request_resources.match /test_post/
 
+            response_header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+            response_form = {}
+            
+            ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_all().each do | arduino |
+              response_form[arduino.id.to_i] = "<form style='display:inline;' action='/#{arduino.name}' method='POST'>"
+            end
+            
+            ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_post_enabled("true").each do | service |
+              response_form[service.device_id] += "#{service.name}: <input type='text' name='#{service.name}'/><br />"
+            end
+            
+            response_form.each_key do | key |
+              response_form[key] += "<input type='submit' value='update state'/></form><br/>"
+            end 
+    
+            response = "#{response_header}#{response_form.values.flatten.join}"
+            
+            @public_server.respond response, request_id
+            @active_requests.delete(request_id)             
+            
           # handle requests for specific devices and services
           else
             parsed_request = request_resources.split("/")
@@ -171,7 +198,7 @@ module ArduinoGateway
             puts "[Controller:process_request] checking if request starts with device name: #{parsed_request[0]}"
 
             # handle requests for services from specific device
-            if !device_match.empty?
+            unless device_match.empty?
               # puts "[Controller:process_request] device specific request confirmed: #{device_match}"
               parsed_request.shift 
               device_info = {name: device_match[0].name.to_s, 
@@ -285,15 +312,14 @@ module ArduinoGateway
         # Method called by the ArduinoClient class to register responses to request
         def register_response(response, request)
 
+          @active_requests[request.id][:arduino_responses][request.address[:name]] = response                       
+
           # if reponse is to an info_request then register services
-          if request.id == -1 
-            register_services response, request.address[:device_id]          
+          if request.id < 0 
+            register_services request          
 
           # else handle response like a normal resource request
           else 
-            @active_requests[request.id][:arduino_responses][request.address[:name]] = response                       
-
-            # @active_requests[request.id][:arduino_responses] << response                       
             requests = @active_requests[request.id][:arduino_requests].length
             responses = @active_requests[request.id][:arduino_responses].length
             puts "[Controller:register_response] number of requests #{requests}, and responses #{responses}"
@@ -301,7 +327,7 @@ module ArduinoGateway
               puts "[Controller:register_response] responses received, id: #{request.id}, content: #{@active_requests[request.id]}"
               # process_response(@active_requests[request.id][:arduino_responses], request.id) 
               process_response request.id
-              @active_requests.delete(request.id)              
+              # @active_requests.delete(request.id)              
             end
           end
         end # register_response method
@@ -347,6 +373,9 @@ module ArduinoGateway
             @public_server.respond public_response, request_id
 
           end
+          
+          @active_requests.delete(request_id) unless @active_requests[request_id][:arduino_responses].empty?            
+                                  
         end # process_response method
 
     end # Controller class
