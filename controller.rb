@@ -115,9 +115,7 @@ module ArduinoGateway
                                             public_response: ""}
             puts "[Controller:register_request] new '#{$1}' request, id: #{request_id}, content: #{@active_requests[request_id]}"
 
-            # route the request to appropriate GET or POST processing method
-            if $1.eql? "GET" then process_get_request(request_id) 
-            elsif $1.eql? "POST" then process_post_request(request_id) end
+            process_request(request_id) 
 
             # start a timer set code to be executed when the timer is up
             @timer.new_timer(1) do
@@ -133,29 +131,17 @@ module ArduinoGateway
 
         ######################################
         # DEPRECATED PROCESS_REQUEST 
-        # 1. read public request and determine which arduino requests need to be made
+        # 1. processes public request and determine which arduino requests need to be made
         # 2. create an array with the appropriate requests
         # 3. pass the array to the make_request method
-        # def process_request(request_id)                
-        #   if @active_requests[request_id][:public_request].match /(GET)/
-        #     process_get_request(request_id) 
-        #   elsif @active_requests[request_id][:public_request].match /(POST)/
-        #     process_post_request(request_id) 
-        #   end
-        # end
 
-        def process_post_request(request_id)
-          @active_requests[request_id][:public_request].match /(GET|POST) \/(\S*)(.*)^(.*)\Z/m
-          request_verb, request_resources, request_options, request_body = $1, $2, $3, $4
-          device_info, device_resources = {}, ["json"]
-          new_requests = {}
-        end
-        
-        def process_get_request(request_id)      
+        def process_request(request_id)      
+
           # parse the URL into verb, resources, options, and body
           @active_requests[request_id][:public_request].match /(GET|POST) \/(\S*)(.*)^(.*)\Z/m
           request_verb, request_resources, request_options, request_body = $1, $2, $3, $4
-          device_info, device_resources = {}, ["json"]
+          device_info, device_resources = {}, []
+          if request_verb.eql? "GET" then device_resources << "json" end
           new_requests = {}
 
           # handle generic requests (for all devices and services)

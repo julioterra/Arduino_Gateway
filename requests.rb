@@ -5,8 +5,8 @@ module ArduinoGateway
   class RestfulRequest
       include ArduinoGateway::Helpers
 
-      attr_accessor :id, :method_type, :address, :body
-      attr_reader :resources_list, :resources, :options
+      attr_accessor :id, :method_type, :address, :body, :format
+      attr_reader :resources_list, :resources, :options, :options_str
    
       # initilize method called to create a new message object   
       def initialize(id="-1", request="", _address={:ip => "0.0.0.0", :port => -1})
@@ -16,19 +16,23 @@ module ArduinoGateway
         @resources_list = []
         @resources = ""
         @options = {}
+        @options_str = ""
         @id = id
         @body = ""
         @method_type = ""
+        @fomat
         @address = _address if _address[:ip] and _address[:port]
 
-        get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*$)\n){0,1}((?:^\S*: *.*$\n)*)(?:\n*(^[\w|\=|\&]*$)\n*)*/ 
+        get_request_syntax = /(GET|POST) (\/\S*)(?:[ ]*(.*?$)\n?){0,1}((?:^\S*: *.*$\n)*){0,1}(?:^(.*)\Z){0,1}/m
         if client_get_request_match = get_request_syntax.match(request)
             self.method_type = $1 if $1
             self.resources = $2 if $2
+            self.format = $3 if $3
             self.options = $4 if $4
             self.body = $5 if $5
-            puts "[RestfulRequests:initialize] all matches: #{p client_get_request_match}"
-            puts "[RestfulRequests:initialize] request initialized #{self.full_request}"
+            puts "[RestfulRequests:initialize] request initialized #{self.restful_request}", ""
+            puts "[RestfulRequests:initialize] request options #{self.options}", ""
+            puts "[RestfulRequests:initialize] request address #{self.address}", ""
           else; puts "[RestfulRequests:initialize] ERROR RESCUE: request could not be initialized" 
         end
       end
@@ -55,6 +59,7 @@ module ArduinoGateway
     def options=(option_in)
       @options = {}
       if option_in.is_a? String
+        @options_str = option_in
         option_in.split("\r\n").each do |data|
           if data.include?(":")
             data.match(/^([^:\r\n]+): ?([^\r\n]+)$/)
@@ -73,8 +78,8 @@ module ArduinoGateway
     end
 
     def restful_request
-      # return_string = "#{@method_type.upcase} #{@resources}\r\n\r\n"
-      return_string = "#{@method_type.upcase} #{@resources}\r\n"
+      # return_string = "#{@method_type.upcase} #{@resources}\r\n\r\n"  
+      return_string = "#{@method_type.upcase} #{@resources} #{@format}\r\n#{@options_str}#{@body.to_s}"
     end
 
     def full_request
