@@ -12,6 +12,13 @@ module ArduinoGateway
         end
     end  
 
+    # PUTS_DEBUG
+    # prints string to the console if debug_code variable set to true
+    def puts_debug(*print_string)
+      debug_code = true
+      puts *print_string if debug_code
+    end
+
     def error_msg(error_type, exception_msg = nil)
       custom_msg = "An issue was encountered when trying to process the current request"
       if error_type == :arduino_address
