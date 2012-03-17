@@ -1,7 +1,7 @@
 require './model_base'
 
 module ArduinoGateway
-  module Model
+  module Models
     module ModelHelpers
 
       module DatabaseAttributes
@@ -23,7 +23,7 @@ module ArduinoGateway
             end
 
             # puts "adding new table from database_attributes #{self}"
-            ::ArduinoGateway::Model::DatabaseBuilder.build_datatable self
+            ::ArduinoGateway::Models::DatabaseBuilder.build_datatable self
           end
         end
       end
@@ -41,7 +41,7 @@ module ArduinoGateway
             @datatables ||= {}
           end
           def build_datatables
-            ::ArduinoGateway::Model::ModelTemplates.constants.each do |record_template|
+            ::ArduinoGateway::Models::Model.constants.each do |record_template|
               unless record_template.equal? :AbstractRecord
                 self.build_datatable(record_template)
               end
@@ -116,7 +116,7 @@ module ArduinoGateway
 
           # returns the ruport datatable associated to current DataRecord
           def datatable
-            ::ArduinoGateway::Model::DatabaseBuilder.datatables[datatable_key]
+            ::ArduinoGateway::Models::DatabaseBuilder.datatables[datatable_key]
           end
 
           # checks if new_record is valid for cur record type

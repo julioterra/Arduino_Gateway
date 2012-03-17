@@ -7,7 +7,7 @@ require './public_server.rb'
 require './model.rb'
 require './controller.rb'
 include Socket::Constants
-include ArduinoGateway::Model
+include ArduinoGateway::Models
 
 public_port_number = 7996
 

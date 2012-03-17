@@ -20,8 +20,9 @@ module ArduinoGateway
         def initialize(public_server)
           @public_server = public_server
           @public_server.register_controller(self)
-          Interface::ArduinoClient.register_controller(self)
           @timer = Timer.new
+
+          Interface::ArduinoClient.register_controller(self)
           @active_requests = {}
           
           # create a thread to listen to keyboard commands
@@ -76,12 +77,12 @@ module ArduinoGateway
         # Returns: no specific return value expected        
         def register_arduino(arduino)
           return false unless address_valid?(arduino)
-          device = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.new arduino
+          device = ::ArduinoGateway::Models::Model::ResourceDevice.new arduino
           arduino[:device_id] = device.id
-          public_request_id, request_string = device.id * -1, "GET /resource_info"
-          request = RestfulRequest.new(public_request_id, request_string, arduino)
+          pub_req_id, req_str = device.id * -1, "GET /resource_info"
+          request = RestfulRequest.new(pub_req_id, req_str, arduino)
 
-          @active_requests[public_request_id] = {public_request: request_string, 
+          @active_requests[pub_req_id] = {public_request: req_str, 
                                           received_on: Time.now.to_i,
                                           arduino_requests: {arduino[:name] => request},
                                           arduino_responses: {},
@@ -114,7 +115,7 @@ module ArduinoGateway
                            range_min: services["range"]["min"],
                            range_max: services["range"]["max"],
                            device_id: request.address[:device_id], service_type_id: service_id}
-            ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.new new_instance            
+            ::ArduinoGateway::Models::Model::ResourceInstance.new new_instance            
           end
         end # register_services method
         ######################################
@@ -132,115 +133,119 @@ module ArduinoGateway
         #              to be created, then creates an array with the appropriate requests
         # Argument: id of the public request
         # Returns: 
-        def process_request(public_request_id)      
+        def process_request(pub_req_id)      
 
           # parse the URL into verb, resources, options, and body
-          @active_requests[public_request_id][:public_request].match /(GET|POST) \/(\S*)(.*)^(.*)\Z/m
-          parsed_requests, new_requests, request_resources = [$1, $2, $3, $4], {}, $2
+          @active_requests[pub_req_id][:public_request].match /(GET|POST) \/(\S*)(.*)^(.*)\Z/m
+          parsed_reqs, new_requests, request_resources = [$1, $2, $3, $4], {}, $2
+          
+          parsed_req = {verb: $1,
+                            resources: $2,
+                            parsed_resources: [],
+                            options: $3,
+                            body: $4}
 
           ## handle / (GENERIC) resource requests ##
-          if request_resources.empty?
-            new_requests = process_generic_request(parsed_requests, public_request_id)
+          if parsed_req[:resources].empty?
+            new_requests = process_generic_request(parsed_req, pub_req_id)
 
           ## handle /TEST_POST/ resource request ##
-          elsif request_resources.match /test_post/
-            new_requests = process_form_request(parsed_requests, public_request_id)
+          elsif parsed_req[:resources].match /test_post/
+            new_requests = process_form_request(pub_req_id)
             
           ## handle ALL OTHER requests ##
           else
-            parsed_resources = parsed_requests[1].split("/")
-            device_match = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_by_name(parsed_resources[0])
+            parsed_req[:parsed_resources] = parsed_req[:resources].split("/")
+            parsed_resources = parsed_reqs[1].split("/")
+            dev_match = ::ArduinoGateway::Models::Model::ResourceDevice.find_by_name(parsed_req[:parsed_resources][0])
 
             # handle requests for DEVICE-BASED SERVICES
-            unless device_match.empty?
-              new_requests = process_device_request(parsed_requests, parsed_resources, device_match, public_request_id)                            
+            unless dev_match.empty?
+              new_requests = process_device_request(parsed_req, dev_match, pub_req_id)                            
+              # new_requests = process_device_request(parsed_reqs, parsed_resources, dev_match, pub_req_id)                            
+
             # handle requests for SERVICES ACCROSS DEVICES
             else 
-              new_requests = process_service_request(parsed_requests, parsed_resources, device_match, public_request_id)
+              new_requests = process_service_request(parsed_req, dev_match, pub_req_id)
+              # new_requests = process_service_request(parsed_reqs, parsed_resources, dev_match, pub_req_id)
             end
 
           end # else related to ALL OTHER requests
 
           new_requests.each  { | name, request | make_request request }
-          @active_requests[public_request_id][:arduino_requests] = new_requests
+          @active_requests[pub_req_id][:arduino_requests] = new_requests
         end # process_request
         ######################################              
 
         ######################################              
         # HANDLE_GENERIC_REQUEST
         #
-        def process_generic_request(parsed_request, public_request_id)
-          request_verb, request_resources = parsed_request[0], parsed_request[1]
-          request_options, request_body = parsed_request[2], parsed_request[3]
-          device_resources, new_requests = ["json"], {}
-          ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_all().each do | arduino |
-            new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
+        def process_generic_request(p_request, pub_req_id)
+          dev_res, requests = ["json"], {}
+          ::ArduinoGateway::Models::Model::ResourceDevice.find_all().each do | arduino |
+            request = "#{p_request[:verb]} /json#{p_request[:options]}#{p_request[:body]}"
             address = {name: arduino.name, ip: arduino.ip, port: arduino.port.to_i, device_id: arduino.id.to_i}
-            new_requests[arduino.name] = RestfulRequest.new(public_request_id, new_request_string, address)                            
+            requests[arduino.name] = RestfulRequest.new(pub_req_id, request, address)                            
           end
-          new_requests
+          requests
         end
         ######################################              
 
         ######################################              
         # HANDLE_GENERIC_REQUEST
         #
-        def process_form_request(parsed_request, public_request_id)
-          request_verb, request_resources = parsed_request[0], parsed_request[1]
-          request_options, request_body = parsed_request[2], parsed_request[3]
-          device_info, device_resources, new_requests = {}, ["json"], {}
+        def process_form_request(pub_req_id)
+          new_requests = {}
           header, body = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n", {}
 
-          ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_all().each do | arduino |
+          ::ArduinoGateway::Models::Model::ResourceDevice.find_all().each do | arduino |
             body[arduino.id.to_i] = "<form style='display:inline;' action='/#{arduino.name}' method='POST'>"
           end
-          ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_post_enabled("true").each do | service |
+          ::ArduinoGateway::Models::Model::ResourceInstance.find_by_post_enabled("true").each do | service |
             body[service.device_id] += "#{service.name}: <input type='text' name='#{service.name}'/><br />"
           end
           body.each_key do | key |
             body[key] += "<input type='submit' value='update state'/></form><br/>"
           end 
 
-          @public_server.respond "#{header}#{body.values.flatten.join}", public_request_id
-          @active_requests.delete(public_request_id) 
+          @public_server.respond "#{header}#{body.values.flatten.join}", pub_req_id
+          @active_requests.delete(pub_req_id) 
         end
         ######################################              
 
         ######################################              
         # HANDLE_DEVICE_REQUEST
         #
-        def process_device_request(parsed_request, parsed_resources, device_match, public_request_id)
-          request_verb, request_resources = parsed_request[0], parsed_request[1]
-          request_options, request_body = parsed_request[2], parsed_request[3]
-          device_info, device_resources, new_requests = {}, ["json"], {}
+        def process_device_request(parsed_req, dev_match, pub_req_id)
+          device_info, dev_res, new_requests = {}, ["json"], {}
 
-          parsed_resources.shift 
-          device_info = {name: device_match[0].name.to_s, id: device_match[0].id, 
-                         ip: device_match[0].ip, port: device_match[0].port}
+          parsed_req[:parsed_resources].shift 
+          device_info = {name: dev_match[0].name.to_s, id: dev_match[0].id, 
+                         ip: dev_match[0].ip, port: dev_match[0].port}
 
           # handle service instance requests
-          service_instance_match = ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_device_id(device_info[:id])              
+          service_instance_match = ::ArduinoGateway::Models::Model::ResourceInstance.find_by_device_id(device_info[:id])              
           if !service_instance_match.empty?
-            parsed_resources.each do | service_name |
+            parsed_req[:parsed_resources].each do | service_name |
               service_instance_match.each do | service_instance |
-                device_resources << service_name if service_instance.name.to_s.eql? service_name
+                dev_res << service_name if service_instance.name.to_s.eql? service_name
               end
             end
           end
 
           # handle generic service requests
-          parsed_resources.each do | service_name |
-            generic_service_match = ::ArduinoGateway::Model::ModelTemplates::ResourceService.find_by_name(service_name)              
+          parsed_req[:parsed_resources].each do | service_name |
+            generic_service_match = ::ArduinoGateway::Models::Model::ResourceService.find_by_name(service_name)              
             if !generic_service_match.empty?
               service_id = generic_service_match[0].id.to_i
               service_instance_match.each do | service_instance |
-                device_resources << service_instance.name if service_instance.service_type_id == service_id
+                dev_res << service_instance.name if service_instance.service_type_id == service_id
               end
             end
           end
 
-          new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-          new_requests[device_info[:name]] = RestfulRequest.new(public_request_id, new_request_string, device_info)              
+          new_req_str = "#{parsed_req[:verb]} /#{dev_res.join("/")}#{parsed_req[:options]}#{parsed_req[:body]}"
+          new_requests[device_info[:name]] = RestfulRequest.new(pub_req_id, new_req_str, device_info)              
           new_requests
         end
         ######################################              
@@ -248,17 +253,15 @@ module ArduinoGateway
         ######################################              
         # HANDLE_SERVICE_REQUEST
         #
-        def process_service_request(parsed_request, parsed_resources, device_match, public_request_id)
-          request_verb, request_resources = parsed_request[0], parsed_request[1]
-          request_options, request_body = parsed_request[2], parsed_request[3]
-          device_info, device_resources, new_requests = {}, ["json"], {}
+        def process_service_request(parsed_req, dev_match, pub_req_id)
+          device_info, dev_res, new_requests = {}, ["json"], {}
           services_by_device = {}
            
            # loop through parsed public request to identify services being requested
-           parsed_resources.each do | service_name |
+           parsed_req[:parsed_resources].each do | service_name |
           
              # look for specific service requests using service name
-             service_instance_match = ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_name(service_name)              
+             service_instance_match = ::ArduinoGateway::Models::Model::ResourceInstance.find_by_name(service_name)              
              service_instance_match.each do | service_instance |
                if services_by_device[service_instance.device_id.to_i] 
                  services_by_device[service_instance.device_id.to_i] << service_instance.name.to_s
@@ -268,11 +271,12 @@ module ArduinoGateway
              end # service_instance_match.each iterator
           
              # look for general service requests
-             generic_service_match = ::ArduinoGateway::Model::ModelTemplates::ResourceService.find_by_name(service_name)              
+             generic_service_match = ::ArduinoGateway::Models::Model::ResourceService.find_by_name(service_name)              
              unless generic_service_match.empty?
                service_id = generic_service_match[0].id.to_i
+
                # find the individual service instances using service_id
-               service_instance_match = ::ArduinoGateway::Model::ModelTemplates::ResourceInstance.find_by_service_type_id(service_id)              
+               service_instance_match = ::ArduinoGateway::Models::Model::ResourceInstance.find_by_service_type_id(service_id)              
                service_instance_match.each do | service_instance |
                  if services_by_device[service_instance.device_id.to_i] 
                    services_by_device[service_instance.device_id.to_i] << service_instance.name.to_s
@@ -281,19 +285,19 @@ module ArduinoGateway
                  end
                end # service_instance_match.each iterator
              end # unless generic_service_match.empty?
-           end # parsed_resources.each iterator
+           end # parsed_req[:parsed_resources].each iterator
           
            # loop services by device to create private requests 
            services_by_device.each do | device , services |
-             services.each { | service | device_resources << service }
-             device_resources.uniq!
-             device_match = ::ArduinoGateway::Model::ModelTemplates::ResourceDevice.find_by_id(device.to_i)
-             unless device_match.empty?
-               device_info = {name: device_match[0].name.to_s, id: device_match[0].id, 
-                              ip: device_match[0].ip, port: device_match[0].port}
-               new_request_string = "#{request_verb} /#{device_resources.join("/")}#{request_options}#{request_body}"
-               new_requests[device_info[:name]] = RestfulRequest.new(public_request_id, new_request_string, device_info)              
-             end # unless device_match.empty?  
+             services.each { | service | dev_res << service }
+             dev_res.uniq!
+             dev_match = ::ArduinoGateway::Models::Model::ResourceDevice.find_by_id(device.to_i)
+             unless dev_match.empty?
+               device_info = {name: dev_match[0].name.to_s, id: dev_match[0].id, 
+                              ip: dev_match[0].ip, port: dev_match[0].port}
+               new_req_str = "#{parsed_req[:verb]} /#{dev_res.join("/")}#{parsed_req[:options]}#{parsed_req[:body]}"
+               new_requests[device_info[:name]] = RestfulRequest.new(pub_req_id, new_req_str, device_info)              
+             end # unless dev_match.empty?  
            end # services_by_device.each
            new_requests
         end
@@ -311,23 +315,23 @@ module ArduinoGateway
         # Description: called by public server to register new public request
         # Arguments: a request string, followed by a request id
         # Returns: no specific return value
-        def register_request(request_string, public_request_id)      
+        def register_request(req_str, pub_req_id)      
 
           # if this is a GET or POST request then process the request
-          if request_string.match /(GET|POST)/
-            puts_debug "[Controller:register_request] new request, id: #{public_request_id}, content: #{request_string}"
-            @active_requests[public_request_id] = {public_request: request_string, received_on: Time.now.to_i,
+          if req_str.match /(GET|POST)/
+            puts_debug "[Controller:register_request] new request, id: #{pub_req_id}, content: #{req_str}"
+            @active_requests[pub_req_id] = {public_request: req_str, received_on: Time.now.to_i,
                                             arduino_requests: {}, arduino_responses: {}, public_response: ""}
-            process_request(public_request_id) 
+            process_request(pub_req_id) 
 
             # start a timer set code to be executed when the timer is up
             @timer.new_timer(1) do
-              process_response public_request_id unless @active_requests[public_request_id].nil?
+              process_response pub_req_id unless @active_requests[pub_req_id].nil?
             end # end timer
 
           # if this is NOT a GET or POST request then respond with an error message
           else
-            @public_server.respond error_msg(:request_not_supported), public_request_id
+            @public_server.respond error_msg(:request_not_supported), pub_req_id
           end
         end # register_request method
         ######################################              
@@ -358,7 +362,6 @@ module ArduinoGateway
         end # register_response method
         ######################################
 
-
         ############################################################################
         ############################################################################
         # OUTGOING API METHODS
@@ -380,16 +383,16 @@ module ArduinoGateway
         # Method called when all responses have been received or when request times out
         # 1. iterate through response in order to create a single response string
         # 2. respond to public request by calling the 
-        def process_response(public_request_id)      
+        def process_response(pub_req_id)      
 
           # if data was received then 
-          unless @active_requests[public_request_id][:arduino_responses].empty?            
+          unless @active_requests[pub_req_id][:arduino_responses].empty?            
             public_responses = []
             http_header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n"
             public_response = "#{http_header}[\r\n"
 
             # create a hash key with device/response pairs
-            @active_requests[public_request_id][:arduino_responses].each do | device, response |
+            @active_requests[pub_req_id][:arduino_responses].each do | device, response |
               response.match /.*?([\[\{].*[\}\]]+)/m
               public_responses << "{\r\n#{device}:#{$1}\r\n}"
             end
@@ -406,17 +409,17 @@ module ArduinoGateway
 
             # respond back to public request with data in json format
             puts "[Controller:process_response] public response #{public_response}"
-            @active_requests[public_request_id][:public_response] = public_response
-            @public_server.respond @active_requests[public_request_id][:public_response], public_request_id
+            @active_requests[pub_req_id][:public_response] = public_response
+            @public_server.respond @active_requests[pub_req_id][:public_response], pub_req_id
 
           else
             http_header = "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\n\r\n"
             public_response = "#{http_header}Resources Not Found"
-            @public_server.respond public_response, public_request_id
+            @public_server.respond public_response, pub_req_id
 
           end
           
-          @active_requests.delete(public_request_id) unless @active_requests[public_request_id][:arduino_responses].empty?            
+          @active_requests.delete(pub_req_id) unless @active_requests[pub_req_id][:arduino_responses].empty?            
                                   
         end # process_response method
 

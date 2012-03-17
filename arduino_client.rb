@@ -89,14 +89,6 @@ module ArduinoGateway
               socket.connect(socket_addr)
               socket.write(request_data.restful_request)
 
-              puts
-              puts
-              puts "[ArduinoClient:ethernet_request] making request #{request_data.restful_request}"
-              puts "[ArduinoClient:ethernet_request] making request #{request_data.restful_request}"
-              puts "[ArduinoClient:ethernet_request] making request #{request_data.restful_request}"
-              puts
-              puts
-
               timer = @controller.timer.new_timer(3) do 
                 if !message_complete
                   timed_out = true
